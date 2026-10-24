@@ -1,0 +1,310 @@
+//! Project tab (backstage), undo/redo and tool switching.
+
+use std::path::PathBuf;
+
+use serde_json::{Value, json};
+
+use super::ps;
+use crate::{CmdResult, CommandSpec as C, Project, Session, Tool};
+
+pub fn commands() -> Vec<C> {
+    vec![
+        // Replacing or saving the project isn't an undoable edit: these are `.view()` commands
+        // that manage `dirty` and the history themselves.
+        C::new("project.new", "New Project", "Project", new).key("Mod+N").view().params(r#"{"name"?: string}"#),
+        C::new("project.sample", "World Atlas Sample", "Project", sample).view(),
+        C::new("project.open", "Open Project", "Project", open).key("Mod+O").view().params(r#"{"path": string}"#),
+        C::new("project.openText", "Open Project (from text)", "Project", open_text).view().params(r#"{"text": project JSON, "fileName"?: string}"#),
+        C::new("project.save", "Save Project", "Project", save).key("Mod+S").view().params(r#"{"path"?: string}"#),
+        C::new("project.saveAs", "Save Project As", "Project", save_as).key("Mod+Shift+S").view().params(r#"{"path": string}"#),
+        C::new("project.rename", "Rename Project", "Project", rename).params(r#"{"name": string}"#),
+        C::new("edit.undo", "Undo", "Quick Access Toolbar", |s, _| if s.undo() { Ok(Value::Null) } else { Err("nothing to undo".into()) })
+            .key("Mod+Z")
+            .view()
+            .when(|s| if s.can_undo() { None } else { Some("nothing to undo") }),
+        C::new("edit.redo", "Redo", "Quick Access Toolbar", |s, _| if s.redo() { Ok(Value::Null) } else { Err("nothing to redo".into()) })
+            .key("Mod+Y")
+            .view()
+            .when(|s| if s.can_redo() { None } else { Some("nothing to redo") }),
+        C::new("tool.set", "Set Map Tool", "Home › Navigate", set_tool)
+            .view()
+            .params(r#"{"tool": "explore"|"select"|"zoomIn"|"measure"|"measureArea"|"createPoint"|"createLine"|"createPolygon"|"editVertices"|"graphicPoint"|"graphicText"|"graphicLine"|"graphicCurve"|"graphicFreehand"|"graphicPolygon"|"graphicLasso"|"graphicRectangle"|"graphicCircle"|"graphicEllipse"|"graphicPicture"}"#),
+        C::new("info.project", "Project Info", "Project", info).view().params(r#"{"nameFilter"?: string, "includeFields"?: bool}"#),
+        C::new("info.commands", "List Commands", "Help", list).view(),
+    ]
+}
+
+/// Replaces the project, clearing history and per-project state.
+pub(crate) fn reset_to(s: &mut Session, p: Project) {
+    reset(s, p);
+}
+
+fn reset(s: &mut Session, p: Project) {
+    // Kept until the command ends: a failure gives the project back with its history.
+    s.put_aside();
+    s.project = p;
+    s.opened = s.opened.wrapping_add(1);
+    s.active_layer = s.map().layers.first().map(|l| l.id);
+    s.table_layer = None;
+    s.table_standalone = None;
+    s.active_layout = None;
+    s.tool = Tool::Explore;
+    s.clear_history();
+    s.history_from_file = s.project.gp_history.len();
+    // Zarr layers that follow the time slider read the step it is at.
+    super::zarr::follow_time(s);
+}
+
+fn new(s: &mut Session, p: &Value) -> CmdResult {
+    reset(s, Project::new(super::ps(p, "name").unwrap_or("Untitled")));
+    s.path = None;
+    Ok(Value::Null)
+}
+
+fn sample(s: &mut Session, _: &Value) -> CmdResult {
+    reset(s, crate::sample::world_project());
+    s.active_layer = s.map().layer_by_name("Countries").map(|l| l.id);
+    s.path = None;
+    Ok(Value::Null)
+}
+
+/// Largest project package opened (1 GiB).
+const MAX_PACKAGE: u64 = 1 << 30;
+
+fn open(s: &mut Session, p: &Value) -> CmdResult {
+    let path = PathBuf::from(super::ps(p, "path").ok_or("path is required")?);
+    let is_package = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("rgispkg"));
+    let proj = if is_package {
+        // Read at most a byte past the limit, so a huge file is refused rather than loaded.
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        std::fs::File::open(&path)
+            .and_then(|f| f.take(MAX_PACKAGE + 1).read_to_end(&mut bytes))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        if bytes.len() as u64 > MAX_PACKAGE {
+            return Err("the package is too large".into());
+        }
+        Project::from_json(&super::items::package_text(&bytes)?)?
+    } else {
+        Project::load(&path)?
+    };
+    reset(s, proj);
+    // A package opens as a new, unsaved project (saving writes a plain project file).
+    if !is_package {
+        name_from_file(s, &path);
+    }
+    s.path = if is_package { None } else { Some(path) };
+    s.notify(format!("Opened {}", s.project.name), false);
+    Ok(Value::Null)
+}
+
+fn open_text(s: &mut Session, p: &Value) -> CmdResult {
+    let text = super::ps(p, "text").ok_or("text is required")?;
+    let proj = Project::from_json(text)?;
+    reset(s, proj);
+    // The browser opens files by name and contents: the name still names the project.
+    if let Some(file) = super::ps(p, "fileName") {
+        name_from_file(s, std::path::Path::new(file));
+    }
+    s.path = None;
+    s.notify(format!("Opened {}", s.project.name), false);
+    Ok(Value::Null)
+}
+
+fn write(s: &mut Session, path: PathBuf) -> CmdResult {
+    let path = if path.extension().is_none() { path.with_extension(crate::project::EXTENSION) } else { path };
+    s.project.save(&path)?;
+    s.dirty = false;
+    s.edit_counts.clear();
+    s.notify(format!("Saved {}", path.display()), false);
+    s.path = Some(path.clone());
+    Ok(json!({"path": path.display().to_string()}))
+}
+
+/// Names the project after its file, as Save As does, so a renamed or copied file opens under
+/// its own name.
+fn name_from_file(s: &mut Session, file: &std::path::Path) {
+    if let Some(stem) = file.file_stem().and_then(|x| x.to_str()).map(str::trim).filter(|x| !x.is_empty()) {
+        s.project.name = stem.chars().take(200).collect();
+    }
+}
+
+fn save(s: &mut Session, p: &Value) -> CmdResult {
+    let path = match super::ps(p, "path") {
+        Some(x) => PathBuf::from(x),
+        None => s.path.clone().ok_or("this project hasn't been saved yet; use Save As")?,
+    };
+    write(s, path)
+}
+
+fn save_as(s: &mut Session, p: &Value) -> CmdResult {
+    let path = PathBuf::from(super::ps(p, "path").ok_or("path is required")?);
+    if let Some(stem) = path.file_stem().and_then(|x| x.to_str()) {
+        s.project.name = stem.to_string();
+    }
+    write(s, path)
+}
+
+fn rename(s: &mut Session, p: &Value) -> CmdResult {
+    let n = super::ps(p, "name").map(str::trim).filter(|n| !n.is_empty()).ok_or("name is required")?;
+    s.project.name = n.chars().take(200).collect();
+    Ok(Value::Null)
+}
+
+fn set_tool(s: &mut Session, p: &Value) -> CmdResult {
+    let t = parse_tool(p)?;
+    if t.creates() {
+        let id = s.layer_id(&Value::Null).map_err(|_| "select the layer to edit in the Layers pane first".to_string())?;
+        let gt = s.map().layer(id).map(|l| l.geometry_type());
+        let ok = matches!(
+            (t, gt),
+            (Tool::CreatePoint, Some(rustgis_data::GeometryType::Point))
+                | (Tool::CreateLine, Some(rustgis_data::GeometryType::Polyline))
+                | (Tool::CreatePolygon, Some(rustgis_data::GeometryType::Polygon))
+        );
+        if !ok {
+            return Err(format!("{} needs a {} layer", t.label(), t.label().trim_start_matches("Create ").to_lowercase()));
+        }
+    }
+    if t == Tool::EditVertices && !s.map().editing.settings.enabled {
+        return Err("editing is turned off (Edit › Edit)".into());
+    }
+    s.tool = t;
+    Ok(Value::Null)
+}
+
+fn parse_tool(p: &Value) -> Result<Tool, String> {
+    let name = ps(p, "tool").ok_or("tool is required")?;
+    Tool::from_code(name).ok_or_else(|| format!("unknown tool '{name}'"))
+}
+
+/// A longitude/latitude extent as `[west, south, east, north]`, or null when there is none.
+fn bbox(e: rustgis_geom::Extent) -> Value {
+    let r = |v: f64| (v * 1e6).round() / 1e6;
+    if e.is_empty() { Value::Null } else { json!([r(e.min_x), r(e.min_y), r(e.max_x), r(e.max_y)]) }
+}
+
+/// Everything about the open project in one call (the AI Assistant's and MCP's `list_layers`).
+/// Layers are in table-of-contents order, top first. `nameFilter` keeps the layers and tables
+/// whose name holds it (ignoring case); `includeFields: false` leaves out their fields.
+fn info(s: &mut Session, p: &Value) -> CmdResult {
+    let filter = ps(p, "nameFilter").map(|f| f.trim().to_lowercase()).filter(|f| !f.is_empty());
+    let named = |name: &str| filter.as_deref().is_none_or(|f| name.to_lowercase().contains(f));
+    let fields = super::b(p, "includeFields").unwrap_or(true);
+    let field_list = |fs: &[rustgis_data::Field]| json!(fs.iter().map(|f| format!("{} ({})", f.name, f.ty.label())).collect::<Vec<_>>());
+    // Addresses lose passwords, keys and tokens: the AI Assistant sends this to its provider.
+    let source = |l: &rustgis_map::Layer| -> Option<String> {
+        let from = match (&l.raster, &l.source) {
+            (Some(r), _) => r.path.clone().or_else(|| r.file_name.clone()),
+            (None, Some(src)) => src.path.clone().or_else(|| src.file_name.clone()),
+            (None, None) => l.dataset.source.clone(),
+        };
+        from.filter(|f| !f.is_empty()).map(|f| crate::sources::redact(&f))
+    };
+    let extent = super::workspace::view_extent(s);
+    let m = s.map();
+    let active = s.active_layer.and_then(|id| m.layer(id)).map(|l| json!({"id": l.id, "name": l.name}));
+    let layers: Vec<Value> = m
+        .layers
+        .iter()
+        .filter(|l| named(&l.name))
+        .map(|l| {
+            let mut v = match &l.raster {
+                Some(rl) => json!({
+                    "id": l.id, "name": l.name, "type": "Raster", "visible": l.visible, "renderer": rl.style.renderer.label(),
+                    "size": rl.data.as_ref().map(|d| json!([d.width, d.height, d.band_count()])),
+                    "missing": rl.data.is_none(),
+                }),
+                None => json!({
+                    "id": l.id, "name": l.name, "type": l.geometry_type().label(), "features": l.dataset.features.len(),
+                    "visible": l.visible, "renderer": l.renderer.kind_label(), "selected": l.selection.len(),
+                    "definitionQuery": l.definition_query.as_deref().filter(|q| !q.trim().is_empty()),
+                    "labels": (l.labels.enabled && !l.labels.default.field.is_empty()).then_some(l.labels.default.field.as_str()),
+                    "labelClasses": label_classes_set(&l.labels)
+                        .then(|| l.labels.in_order().map(|c| json!({"name": c.name, "where": c.where_, "field": c.field, "visible": c.visible})).collect::<Vec<_>>()),
+                    "fields": field_list(&l.dataset.fields),
+                }),
+            };
+            if let Some(o) = v.as_object_mut() {
+                o.insert("group".into(), json!(m.group_of(l.id).map(|g| g.name.as_str())));
+                o.insert("source".into(), json!(source(l)));
+                o.insert("extent".into(), bbox(l.extent()));
+                if !fields {
+                    o.remove("fields");
+                }
+            }
+            v
+        })
+        .collect();
+    let layouts: Vec<Value> = s
+        .project
+        .layouts
+        .iter()
+        .map(|lo| {
+            let frames: Vec<Value> = lo
+                .elements
+                .iter()
+                .filter_map(|e| match &e.kind {
+                    rustgis_map::layout::ElementKind::MapFrame { map, scale, .. } => {
+                        Some(json!({"id": e.id, "name": e.name, "map": map, "scale": scale.round()}))
+                    }
+                    _ => None,
+                })
+                .collect();
+            json!({"name": lo.name, "mapFrames": frames})
+        })
+        .collect();
+    Ok(json!({
+        "name": s.project.name,
+        "path": s.path.as_ref().map(|p| p.display().to_string()),
+        "unsaved": s.dirty,
+        "maps": s.project.maps.iter().map(|m| m.name.clone()).collect::<Vec<_>>(),
+        "activeMap": m.name,
+        "basemap": m.basemap.code(),
+        "projection": m.projection.code(),
+        "scale": m.scale().round(),
+        "center": {"lon": m.center_lonlat().x, "lat": m.center_lonlat().y},
+        "extent": bbox(extent),
+        "bearing": m.camera.bearing,
+        "pitch": m.camera.pitch,
+        "activeLayer": active,
+        "layers": layers,
+        "groups": m.groups.iter().map(|g| json!({
+            "id": g.id, "name": g.name, "visible": g.visible, "transparency": g.transparency,
+            "minScale": g.min_scale, "maxScale": g.max_scale, "layers": g.children,
+        })).collect::<Vec<_>>(),
+        // Web tile layers (XYZ, WMS, vector tiles, styles, archives) draw under the layers above.
+        // Their addresses lose keys and tokens: the AI Assistant sends this to its provider.
+        "tileLayers": super::tiles::list(s, true),
+        "tables": s.project.tables.iter().filter(|t| named(&t.name)).map(|t| {
+            let mut v = json!({"id": t.id, "name": t.name, "rows": t.features.len(), "fields": field_list(&t.fields)});
+            if let (false, Some(o)) = (fields, v.as_object_mut()) {
+                o.remove("fields");
+            }
+            v
+        }).collect::<Vec<_>>(),
+        "layouts": layouts,
+    }))
+}
+
+fn list(s: &mut Session, _: &Value) -> CmdResult {
+    let builtin = s
+        .registry
+        .commands
+        .iter()
+        .map(|c| json!({"id": c.id, "label": c.label, "location": c.location, "shortcut": c.shortcut, "params": c.params}));
+    let plugins = rustgis_plugins::commands().into_iter().map(|c| {
+        json!({"id": c.id, "label": c.decl.label, "location": format!("Plugins › {}", c.plugin.manifest.name), "shortcut": "", "params": c.decl.params})
+    });
+    Ok(Value::Array(builtin.chain(plugins).collect()))
+}
+
+/// Whether a layer's labels go beyond a plain Default class: other classes, or a Default that
+/// is renamed, hidden or has a clause of its own. Then `info.project` lists the classes.
+fn label_classes_set(labels: &rustgis_map::Labeling) -> bool {
+    let d = &labels.default;
+    !labels.classes.is_empty()
+        || !d.visible
+        || d.name != rustgis_map::symbology::DEFAULT_LABEL_CLASS
+        || d.where_.as_deref().is_some_and(|w| !w.trim().is_empty())
+}

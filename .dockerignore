@@ -1,0 +1,10 @@
+.git
+target
+**/target
+.gitignore
+.env
+.env.*
+data
+gis-data
+*.tmp
+*.png.tmp

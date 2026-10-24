@@ -1,0 +1,106 @@
+[project]
+site_name = "RustGIS"
+site_description = "A fast, free and open-source GIS in pure Rust for mapping, analyzing and sharing geospatial data, on the desktop and in the browser"
+site_author = "opengeos"
+site_url = "https://rustgis.app"
+repo_url = "https://github.com/opengeos/RustGIS"
+repo_name = "opengeos/RustGIS"
+copyright = "Copyright &copy; 2026 Qiusheng Wu"
+extra_css = ["stylesheets/extra.css"]
+
+nav = [
+  { "Home" = "index.md" },
+  { "Installation" = "installation.md" },
+  { "Getting Started" = "getting-started.md" },
+  { "Web App" = "https://web.rustgis.app" },
+  { "User Guide" = [
+    "user-guide/index.md",
+    "user-guide/data.md",
+    "user-guide/web-data.md",
+    "user-guide/data-formats.md",
+    "user-guide/maps.md",
+    "user-guide/cartography.md",
+    "user-guide/editing.md",
+    "user-guide/analysis.md",
+    "user-guide/layouts.md",
+    "user-guide/sharing.md",
+    "user-guide/workspace.md",
+    "user-guide/assistant.md",
+  ] },
+  { "Comparison" = [
+    "comparison/index.md",
+    "comparison/geolibre.md",
+    "comparison/qgis.md",
+  ] },
+  { "Command Line" = "cli.md" },
+  { "Python" = "python.md" },
+  { "MCP Server" = "mcp.md" },
+  { "Plugins" = "plugins.md" },
+  { "Languages" = "i18n.md" },
+  { "Architecture" = "architecture.md" },
+  { "Contributing" = "contributing.md" },
+  { "Acknowledgements" = "acknowledgements.md" },
+  { "Sponsor" = "sponsor.md" },
+  { "Privacy" = "privacy.md" },
+  { "Report Issues" = "https://github.com/opengeos/RustGIS/issues" },
+]
+
+[project.theme]
+logo = "https://assets.rustgis.app/images/logo.svg"
+favicon = "https://assets.rustgis.app/images/favicon.png"
+features = [
+  "content.code.copy",
+  "navigation.indexes",
+  "navigation.footer",
+  "navigation.instant",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "search.share",
+]
+
+[project.theme.icon]
+repo = "fontawesome/brands/github"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "deep orange"
+accent = "indigo"
+toggle.icon = "material/toggle-switch-off-outline"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "deep orange"
+accent = "indigo"
+toggle.icon = "material/toggle-switch"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.highlight]
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.keys]
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/opengeos/RustGIS"
+name = "RustGIS on GitHub"
+
+[[project.extra.social]]
+icon = "fontawesome/solid/heart"
+link = "https://github.com/sponsors/giswqs"
+name = "Sponsor RustGIS on GitHub"
+
+[[project.extra.social]]
+icon = "fontawesome/solid/mug-hot"
+link = "https://buymeacoffee.com/giswqs"
+name = "Buy the maintainer a coffee"

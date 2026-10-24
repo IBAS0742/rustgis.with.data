@@ -1,0 +1,60 @@
+name: Rust tests
+
+# The workspace's tests and layering check on each runner in `os` (a JSON list), for CI and CI on
+# label, and the release build of the apps as well for the nightly run.
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: Runners to test on, as a JSON list
+        required: true
+        type: string
+      release-build:
+        description: Also build the apps in release mode (slow, so nightly and `ci:full` only)
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # RUSTFLAGS replaces the `rustflags` in .cargo/config.toml, so Windows repeats the static C
+    # runtime the release builds link.
+    env:
+      RUSTFLAGS: ${{ startsWith(matrix.os, 'windows') && '-D warnings -C target-feature=+crt-static' || '-D warnings' }}
+      # Line tables, not full debug info: backtraces keep their files and lines, and the test
+      # builds compile, link and cache faster (Windows is slow to write the debug info).
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.os) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Pull requests restore main's cache but don't save their own: saving takes minutes on
+          # Windows, and pull request caches crowd main's out of the repository's cache space.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # The nightly's cache holds the release build too: keep it apart from the one pull
+          # requests restore.
+          key: ${{ inputs.release-build && 'release' || '' }}
+      - name: Tests
+        run: cargo test --workspace --locked
+      - name: Layering check
+        run: cargo xtask layers
+      - name: Build release apps
+        if: inputs.release-build
+        run: cargo build --release --locked -p rustgis -p rustgis-cli

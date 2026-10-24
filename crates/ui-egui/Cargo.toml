@@ -1,0 +1,43 @@
+[package]
+name = "rustgis-ui-egui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "RustGIS L6: the ribbon egui front end (ribbon, panes, map view); swappable"
+
+[lints]
+workspace = true
+
+[dependencies]
+rustgis-engine = { workspace = true }
+rustgis-assistant = { workspace = true }
+egui = { workspace = true }
+# The GPU map backend draws inside egui's own wgpu render pass.
+egui-wgpu = { workspace = true }
+bytemuck = { workspace = true }
+egui_extras = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+log = { workspace = true }
+web-time = { workspace = true }
+# The system's preferred interface languages (the browser's on the web).
+sys-locale = { version = "0.3", features = ["js"] }
+
+# Pictures kept with features (photo thumbnails), shown in the identify popup.
+image = { workspace = true, features = ["jpeg"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rfd = { workspace = true }
+
+# Stopping an agent on this computer with every process it started: its process group, by the
+# system call (as the plugins crate does).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1", features = ["process"] }
+
+[dev-dependencies]
+tempfile = "3"
+rustgis-plugins = { workspace = true, features = ["testing"] }
+egui_kittest = { workspace = true, features = ["wgpu", "snapshot"] }
+image = { workspace = true }
+pollster = { workspace = true }

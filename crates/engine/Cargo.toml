@@ -1,0 +1,41 @@
+[package]
+name = "rustgis-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "RustGIS L4: session, undo, command registry, ribbon feature catalog, sample project"
+
+[lints]
+workspace = true
+
+[dependencies]
+rustgis-geom = { workspace = true }
+rustgis-data = { workspace = true }
+rustgis-map = { workspace = true }
+rustgis-analysis = { workspace = true }
+rustgis-render = { workspace = true }
+tiny-skia = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+web-time = { workspace = true }
+base64 = { workspace = true }
+rustgis-plugins = { workspace = true }
+# The system's time zone and locales, to pick the worldview of the built-in countries.
+iana-time-zone = { version = "0.1", features = ["fallback"] }
+sys-locale = { version = "0.3", features = ["js"] }
+# The GeoLibre tool suite (native only: its tools read and write files).
+rustgis-geolibre = { workspace = true, optional = true }
+
+[features]
+geolibre = ["dep:rustgis-geolibre"]
+
+[dev-dependencies]
+# Writing sample GeoPackages.
+rusqlite = { workspace = true }
+rustgis-plugins = { workspace = true, features = ["testing"] }
+tiny-skia = { workspace = true }
+
+# Time slider animations as GIFs (exported by the desktop app only).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+image = { workspace = true, features = ["gif"] }

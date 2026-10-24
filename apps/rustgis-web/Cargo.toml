@@ -1,0 +1,28 @@
+[package]
+name = "rustgis-web"
+description = "RustGIS in the browser (eframe web runner, WebGPU with WebGL2 fallback)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+rustgis-ui-egui = { workspace = true }
+# The GeoLibre tools, run in the browser by geolibre-rust's WASI runner.
+rustgis-engine = { workspace = true, features = ["geolibre"] }
+egui = { workspace = true }
+log = { workspace = true }
+serde_json = { workspace = true }
+web-time = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+eframe = { workspace = true, features = ["default_fonts", "wgpu"] }
+# The picked file itself, so a large GeoTIFF is read a part at a time (`parts.rs`).
+rfd = { workspace = true, features = ["file-handle-inner"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "Node", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "File", "Url", "Location", "Event", "EventTarget", "MessageEvent", "BeforeUnloadEvent", "Storage", "Response", "Headers", "AbortController", "AbortSignal", "RequestInit", "RequestRedirect", "ReadableStream", "ReadableStreamDefaultReader", "ImageBitmap", "ImageBitmapOptions", "PremultiplyAlpha", "ColorSpaceConversion", "OffscreenCanvas", "OffscreenCanvasRenderingContext2d", "ImageData"] }

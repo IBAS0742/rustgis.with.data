@@ -1,0 +1,32 @@
+services:
+  rustgis-preview:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rustgis-preview:local
+    ports:
+      # Loopback by default. Change to a trusted LAN address only behind a firewall/reverse proxy.
+      - "127.0.0.1:8765:8765"
+    environment:
+      RUSTGIS_PREVIEW_HOME: /data
+      RUSTGIS_PREVIEW_WEB_DIR: /app/web
+      RUSTGIS_PREVIEW_BIND: 0.0.0.0:8765
+    volumes:
+      # Projects, versions, source/database configuration and rebuildable cache survive rebuilds.
+      - rustgis-preview-data:/data
+      # Read-only source data. Add /srv/gis as a source inside the web console.
+      - "${RUSTGIS_SOURCE_DIR:-./gis-data}:/srv/gis:ro"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  rustgis-preview-data:

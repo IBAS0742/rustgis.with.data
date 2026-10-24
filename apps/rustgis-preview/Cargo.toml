@@ -1,0 +1,12 @@
+[package]
+name = "rustgis-preview-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "RustGIS Preview: self-hosted browser GIS backend"
+
+[lints]
+workspace = true
+
+[dependencies]
+rustgis-preview = { workspace = true }

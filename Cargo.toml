@@ -1,0 +1,135 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*", "xtask"]
+default-members = ["crates/*", "apps/rustgis", "apps/rustgis-cli", "xtask"]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.90"
+repository = "https://github.com/opengeos/RustGIS"
+
+[workspace.dependencies]
+# internal
+rustgis-geom = { path = "crates/geom" }
+rustgis-data = { path = "crates/data" }
+rustgis-map = { path = "crates/map" }
+rustgis-analysis = { path = "crates/analysis" }
+rustgis-render = { path = "crates/render" }
+rustgis-engine = { path = "crates/engine" }
+rustgis-ui-egui = { path = "crates/ui-egui" }
+rustgis-geolibre = { path = "crates/geolibre" }
+rustgis-plugins = { path = "crates/plugins" }
+rustgis-tiles = { path = "crates/tiles" }
+rustgis-assistant = { path = "crates/assistant" }
+rustgis-preview = { path = "crates/preview" }
+
+# foundation
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.11"
+log = "0.4"
+# std::time that also works in the browser (std panics on wasm32-unknown-unknown).
+web-time = "1"
+# Small blocking HTTP server for the self-hosted preview. It has no TLS: deployment docs bind it to
+# localhost or put a trusted reverse proxy in front.
+tiny_http = { version = "0.12", default-features = false }
+
+# geo / formats / rendering
+geo = "0.33"
+# A5, the equal-area pentagonal DGGS (opengeos/RustGIS#551)
+a5 = "1"
+shapefile = "0.9"
+csv = "1"
+tiny-skia = "0.12"
+# GPU map backend: vertex data shared with wgpu in ui-egui (derive only; unsafe stays forbidden).
+bytemuck = { version = "1", features = ["derive"] }
+# GPU map backend: polygon/line tessellation for the GPU scene (same major as SpatialOS's 1.x).
+lyon = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+ab_glyph = "0.2"
+# Rasters: GeoTIFF decoding/encoding, and coordinate systems by EPSG code (pure Rust, except the
+# Zstandard decoder `rustgis-data` turns on, C that clang compiles for the browser build too).
+tiff = "0.11"
+# LZW chunks the tiff crate fails on (issue #350), decoded with the version it uses.
+weezl = "0.1"
+# The tests' Zstandard-compressed GeoTIFFs (the version the tiff crate decodes with).
+zstd = { version = "0.14", default-features = false }
+proj4rs = { version = "0.2", default-features = false }
+crs-definitions = { version = "0.6", default-features = false, features = ["proj4"] }
+base64 = "0.23"
+# Deflate for PDF image streams.
+miniz_oxide = "0.8"
+roxmltree = "0.21"
+url = "2.5.8"
+epaint_default_fonts = "0.36"
+# Vector data providers: GeoParquet (pure Rust, so the browser reads it too), FlatGeobuf and
+# GeoPackage (SQLite, desktop only).
+# Read without Arrow, which would make the web app's WebAssembly far larger (Arrow is only used
+# by the tests, to write sample files).
+parquet = { version = "60", default-features = false, features = ["snap", "lz4", "flate2", "flate2-rust_backend"] }
+arrow-array = { version = "60", default-features = false }
+arrow-schema = { version = "60", default-features = false }
+bytes = "1"
+flatgeobuf = { version = "6", default-features = false }
+geozero = { version = "0.15", default-features = false, features = ["with-wkb"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+# PostgreSQL/PostGIS, in pure Rust: the client, and TLS through rustls (ring, as ureq has it).
+postgres = { version = "0.19", default-features = false }
+tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# MySQL/MariaDB, in pure Rust: the client (zlib through miniz_oxide), TLS through rustls (ring).
+mysql = { version = "28", default-features = false, features = ["minimal-rust", "rustls-tls-ring"] }
+# SQL Server: TDS with rustls, Windows logins on Windows, and SQL Browser named instances.
+tiberius = { version = "0.13", default-features = false, features = ["tds80", "rustls", "winauth", "sql-browser-tokio"] }
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
+tokio-util = { version = "0.7", default-features = false, features = ["compat"] }
+webpki-roots = "1"
+# Excel and OpenDocument spreadsheets, in pure Rust (the browser too).
+calamine = { version = "0.36", default-features = false }
+laz = { version = "0.13", default-features = false }
+# Zarr chunk codecs, in pure Rust (the browser too): LZ4 (blosc's usual codec; already in the
+# build through parquet) and a zstd decoder.
+lz4_flex = { version = "0.14", default-features = false, features = ["std", "safe-decode", "checked-decode"] }
+ruzstd = { version = "0.9", default-features = false, features = ["std"] }
+# PMTiles archives compressed with Brotli, in pure Rust (the browser too).
+brotli-decompressor = { version = "~6.0.1", default-features = false, features = ["std"] }
+
+# ui
+egui = "0.36"
+egui-wgpu = "0.36"
+egui_extras = { version = "0.36", default-features = false }
+eframe = { version = "0.36", default-features = false }
+egui_kittest = "0.36"
+rfd = "0.17"
+pollster = "0.4"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+
+# The web app's build (Trunk, `data-cargo-profile` in apps/rustgis-web/index.html): whole-program
+# LTO in one codegen unit makes the WebAssembly about a sixth smaller, a quicker download for
+# the web app. Slower to build, so native releases keep thin LTO.
+[profile.web]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
