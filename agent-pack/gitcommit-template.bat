@@ -4,8 +4,10 @@ rem  One-shot commit script template.
 rem  For AI agents: after finishing a change set, copy this file to the
 rem  REPO ROOT as NNN-<short-english-slug>-gitcommit.bat where NNN is
 rem  the next 3-digit number (001, 002, ...), replace __COMMIT_MSG__
-rem  below with the real commit message, and tell the user to double
-rem  click it. Do not run the script yourself.
+rem  below with the real commit message, replace __ADD_PATHS__ with the
+rem  space-separated paths this phase changed (use -A ONLY when no other
+rem  uncommitted changes exist), and tell the user to double click it.
+rem  Do not run the script yourself.
 rem  The commit message must be a single line without %% ! ^& ^| ^< ^> ^^
 rem =====================================================================
 setlocal
@@ -14,8 +16,8 @@ set "MSG=__COMMIT_MSG__"
 title %~nx0
 cd /d "%~dp0" || goto :fail
 
-echo === [1/4] git add -A ===
-git add -A || goto :fail
+echo === [1/4] git add ===
+git add __ADD_PATHS__ || goto :fail
 
 echo === [2/4] git commit ===
 git config user.email >nul 2>&1

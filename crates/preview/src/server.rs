@@ -367,8 +367,19 @@ fn api_response(app: &App, method: &Method, path: &str, query: &str, body: &[u8]
                 Err(response) => return response,
             };
             let mut store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
-            match store.create_project(&request.name, request.content) {
+            match store.create_project(&request.name, request.description.as_deref(), request.content) {
                 Ok(created) => json_response(201, created),
+                Err(e) => store_error_response(e),
+            }
+        }
+        (Method::Patch, ["projects", project]) => {
+            let request: UpdateProject = match parse_json(body) {
+                Ok(value) => value,
+                Err(response) => return response,
+            };
+            let mut store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
+            match store.update_project_meta(project, request.name.as_deref(), request.description.as_deref()) {
+                Ok(meta) => json_response(200, meta),
                 Err(e) => store_error_response(e),
             }
         }
@@ -422,7 +433,7 @@ fn api_response(app: &App, method: &Method, path: &str, query: &str, body: &[u8]
                 Err(response) => return response,
             };
             let mut store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
-            match store.save_working_copy(project, &request.working_copy_id, &request.content) {
+            match store.save_working_copy(project, &request.working_copy_id, &request.content, request.title.as_deref()) {
                 Ok(version) => json_response(201, version),
                 Err(e) => store_error_response(e),
             }
@@ -433,7 +444,7 @@ fn api_response(app: &App, method: &Method, path: &str, query: &str, body: &[u8]
                 Err(response) => return response,
             };
             let mut store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
-            match store.create_working_copy(project, &request.version_id) {
+            match store.create_working_copy(project, &request.version_id, request.title.as_deref()) {
                 Ok(working) => json_response(201, working),
                 Err(e) => store_error_response(e),
             }
@@ -475,7 +486,7 @@ fn api_response(app: &App, method: &Method, path: &str, query: &str, body: &[u8]
                 Err(response) => return response,
             };
             let mut store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
-            match store.save_working_copy(project, working, &request.content) {
+            match store.save_working_copy(project, working, &request.content, request.title.as_deref()) {
                 Ok(version) => json_response(201, version),
                 Err(e) => store_error_response(e),
             }
@@ -663,7 +674,17 @@ fn file_content_type(name: &str) -> &'static str {
 struct CreateProject {
     name: String,
     #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
     content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UpdateProject {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -702,6 +723,8 @@ struct SetPassword {
 struct CopyVersion {
     #[serde(rename = "versionId")]
     version_id: String,
+    #[serde(default)]
+    title: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -709,11 +732,15 @@ struct SaveVersion {
     #[serde(rename = "workingCopyId")]
     working_copy_id: String,
     content: String,
+    #[serde(default)]
+    title: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct SaveContent {
     content: String,
+    #[serde(default)]
+    title: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -948,13 +975,49 @@ mod tests {
     }
 
     #[test]
+    fn project_metadata_is_editable_over_the_api() {
+        let (root, store) = temp_store("patch");
+        let app = test_app(store);
+        let created = api_response(app.as_ref(), &Method::Post, "/api/projects", "", r#"{"name":"旧名","description":"初始备注"}"#.as_bytes());
+        assert_eq!(created.status_code().0, 201);
+        let (project_id, created_at) = {
+            let body: serde_json::Value = serde_json::from_reader(created.into_reader()).expect("json");
+            (body["project"]["id"].as_str().expect("id").to_owned(), body["project"]["created_at_ms"].as_u64().expect("created"))
+        };
+        let patched = api_response(
+            app.as_ref(),
+            &Method::Patch,
+            &format!("/api/projects/{project_id}"),
+            "",
+            r#"{"name":"新名","description":""}"#.as_bytes(),
+        );
+        assert_eq!(patched.status_code().0, 200);
+        let body: serde_json::Value = serde_json::from_reader(patched.into_reader()).expect("json");
+        assert_eq!(body["name"].as_str(), Some("新名"));
+        assert_eq!(body["description"].as_null(), Some(()), "empty description clears the field");
+        assert_eq!(body["created_at_ms"].as_u64(), Some(created_at), "creation time is not editable");
+
+        let bad = api_response(
+            app.as_ref(),
+            &Method::Patch,
+            &format!("/api/projects/{project_id}"),
+            "",
+            r#"{"name":"   "}"#.as_bytes(),
+        );
+        assert_eq!(bad.status_code().0, 400, "an empty name is rejected");
+        let missing = api_response(app.as_ref(), &Method::Patch, "/api/projects/prj_missing", "", r#"{"name":"x"}"#.as_bytes());
+        assert_eq!(missing.status_code().0, 404);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
     fn console_is_served_even_when_the_map_build_is_missing() {
         let (root, store) = temp_store("console");
         let app = test_app(store);
         let home = static_response(app.as_ref(), &Method::Get, "/");
         assert_eq!(home.status_code().0, 200);
         let text = String::from_utf8(home.into_reader().bytes().filter_map(Result::ok).collect()).expect("utf-8");
-        assert!(text.contains("RustGIS Preview"));
+        assert!(text.contains("RustGIS 预览"));
         let js = static_response(app.as_ref(), &Method::Get, "/console.js");
         let js = String::from_utf8(js.into_reader().bytes().filter_map(Result::ok).collect()).expect("utf-8");
         assert!(js.contains("RustGIS Preview console"));

@@ -420,20 +420,20 @@ impl SourceRegistry {
             return Some(ReferenceCheck {
                 state: ReferenceState::Outside,
                 source_id: None,
-                reason: "the file URL is not valid URL text".into(),
+                reason: "文件 URL 不是合法的 URL 文本".into(),
             });
         };
         match self.resolve_file(id, &relative) {
             Ok(_) => Some(ReferenceCheck {
                 state: ReferenceState::Available,
                 source_id: Some(source_id),
-                reason: "the file exists inside a configured source".into(),
+                reason: "文件存在于已配置的数据源内".into(),
             }),
             Err(e) => {
                 let (state, reason) = match &e {
-                    StoreError::FileNotFound(_) => (ReferenceState::Missing, "the file is missing".to_owned()),
-                    StoreError::SourceUnavailable(_) => (ReferenceState::Disabled, "the source folder is disabled".to_owned()),
-                    StoreError::SourceNotFound(_) => (ReferenceState::Outside, "the source folder no longer exists".to_owned()),
+                    StoreError::FileNotFound(_) => (ReferenceState::Missing, "文件缺失".to_owned()),
+                    StoreError::SourceUnavailable(_) => (ReferenceState::Disabled, "数据源目录已停用".to_owned()),
+                    StoreError::SourceNotFound(_) => (ReferenceState::Outside, "数据源目录已不存在".to_owned()),
                     StoreError::PathNotAllowed(_) | StoreError::InvalidInput(_) => (ReferenceState::Outside, e.to_string()),
                     _ => (ReferenceState::Missing, e.to_string()),
                 };
@@ -449,16 +449,16 @@ impl SourceRegistry {
     pub fn check_reference(&self, reference: &str) -> ReferenceCheck {
         let reference = reference.trim();
         if reference.is_empty() {
-            return ReferenceCheck { state: ReferenceState::Missing, source_id: None, reason: "the layer has no file path".into() };
+            return ReferenceCheck { state: ReferenceState::Missing, source_id: None, reason: "图层没有文件路径".into() };
         }
         if reference.contains('\0') {
-            return ReferenceCheck { state: ReferenceState::Outside, source_id: None, reason: "the path contains NUL".into() };
+            return ReferenceCheck { state: ReferenceState::Outside, source_id: None, reason: "路径包含 NUL 字符".into() };
         }
         if looks_remote(reference) {
             return ReferenceCheck {
                 state: ReferenceState::Remote,
                 source_id: None,
-                reason: "remote references are not checked by the server".into(),
+                reason: "服务端不检查远程引用".into(),
             };
         }
         let path = Path::new(reference);
@@ -466,7 +466,7 @@ impl SourceRegistry {
             return ReferenceCheck {
                 state: ReferenceState::Outside,
                 source_id: None,
-                reason: "parent traversal is not allowed in a project reference".into(),
+                reason: "工程引用不允许包含父目录穿越".into(),
             };
         }
         let absolute = path.is_absolute();
@@ -490,34 +490,34 @@ impl SourceRegistry {
                         return ReferenceCheck {
                             state: ReferenceState::Outside,
                             source_id: Some(folder.id.clone()),
-                            reason: "the path resolves outside its configured source root".into(),
+                            reason: "路径解析后越出了所属数据源根目录".into(),
                         };
                     }
                     if !folder.enabled {
-                        disabled = Some((folder.id.clone(), "the source folder is disabled".into()));
+                        disabled = Some((folder.id.clone(), "数据源目录已停用".into()));
                         continue;
                     }
                     if found.is_file() {
                         return ReferenceCheck {
                             state: ReferenceState::Available,
                             source_id: Some(folder.id.clone()),
-                            reason: "the file exists inside a configured source".into(),
+                            reason: "文件存在于已配置的数据源内".into(),
                         };
                     }
-                    missing = Some((folder.id.clone(), "the reference is not a regular file".into()));
+                    missing = Some((folder.id.clone(), "引用目标不是常规文件".into()));
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                    permission = Some("permission denied while checking the reference".to_string());
+                    permission = Some("检查引用时被拒绝访问".to_string());
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     if !folder.enabled {
-                        disabled = Some((folder.id.clone(), "the source folder is disabled".into()));
+                        disabled = Some((folder.id.clone(), "数据源目录已停用".into()));
                     } else {
-                        missing = Some((folder.id.clone(), "the file is missing".into()));
+                        missing = Some((folder.id.clone(), "文件缺失".into()));
                     }
                 }
                 Err(_) => {
-                    missing = Some((folder.id.clone(), "the reference could not be checked".into()));
+                    missing = Some((folder.id.clone(), "无法检查该引用".into()));
                 }
             }
         }
@@ -525,18 +525,18 @@ impl SourceRegistry {
             return ReferenceCheck { state: ReferenceState::Disabled, source_id: Some(source_id), reason };
         }
         if let Some(source_id) = missing.as_ref().map(|(id, _)| id.clone()) {
-            let reason = missing.map(|(_, reason)| reason).unwrap_or_else(|| "the file is missing".into());
+            let reason = missing.map(|(_, reason)| reason).unwrap_or_else(|| "文件缺失".into());
             return ReferenceCheck { state: ReferenceState::Missing, source_id: Some(source_id), reason };
         }
         if let Some(reason) = permission {
             return ReferenceCheck { state: ReferenceState::Missing, source_id: None, reason };
         }
         let reason = if self.folders.is_empty() {
-            "no source folders are configured".to_owned()
+            "尚未配置任何数据源目录".to_owned()
         } else if absolute {
-            "the path is outside every configured source root".to_owned()
+            "路径在所有已配置的数据源根目录之外".to_owned()
         } else {
-            "the relative reference was not found in any configured source root".to_owned()
+            "相对路径引用未在任何已配置的数据源根目录中找到".to_owned()
         };
         ReferenceCheck { state: ReferenceState::Outside, source_id: None, reason }
     }
@@ -650,7 +650,7 @@ fn normalize_relative(relative: &str) -> Result<String, StoreError> {
             continue;
         }
         if part == ".." {
-            return Err(StoreError::PathNotAllowed("parent traversal is not allowed".into()));
+            return Err(StoreError::PathNotAllowed("不允许父目录穿越".into()));
         }
         if part.contains(':') {
             return Err(StoreError::PathNotAllowed("drive and alternate-stream prefixes are not allowed".into()));

@@ -81,7 +81,7 @@ fn missing_file_is_unavailable_hidden_and_recovers_without_rewriting_the_project
     assert_eq!(prepared.availability.unavailable, 1);
     assert_eq!(prepared.availability.layers[0].status, "unavailable");
     assert!(prepared.availability.layers[0].original_visible);
-    assert_eq!(prepared.availability.layers[0].reason.as_deref(), Some("the file is missing"));
+    assert_eq!(prepared.availability.layers[0].reason.as_deref(), Some("文件缺失"));
     assert!(!layer_visible(&prepared.content), "an unavailable layer is hidden in the derived copy");
     assert_eq!(text, source_project(&file, true), "preparing does not rewrite the stored project");
 
@@ -106,7 +106,7 @@ fn a_file_outside_every_source_root_is_never_probed() {
     let text = source_project(&outside, true);
     let prepared = availability::prepare(&text, &sources).expect("prepare");
     assert_eq!(prepared.availability.layers[0].status, "unavailable");
-    assert!(prepared.availability.layers[0].reason.as_deref().is_some_and(|r| r.contains("outside")));
+    assert!(prepared.availability.layers[0].reason.as_deref().is_some_and(|r| r.contains("之外")));
     assert!(!layer_visible(&prepared.content));
     std::fs::remove_dir_all(root).ok();
 }
@@ -123,7 +123,7 @@ fn disabled_sources_and_remote_urls_have_distinct_states() {
     let text = source_project(&file, true);
     let prepared = availability::prepare(&text, &sources).expect("prepare disabled");
     assert_eq!(prepared.availability.layers[0].status, "unavailable");
-    assert_eq!(prepared.availability.layers[0].reason.as_deref(), Some("the source folder is disabled"));
+    assert_eq!(prepared.availability.layers[0].reason.as_deref(), Some("数据源目录已停用"));
 
     let remote = source_project(Path::new("https://example.test/places.geojson"), true);
     let prepared = availability::prepare(&remote, &sources).expect("prepare remote");
@@ -153,7 +153,7 @@ fn embedded_data_and_raster_references_are_checked_without_reads() {
     let prepared = availability::prepare(&serde_json::to_string(&project).expect("json"), &sources).expect("prepare");
     assert_eq!(prepared.availability.layers[0].status, "unavailable");
     assert_eq!(prepared.availability.layers[0].kind, "raster");
-    assert!(prepared.availability.layers[0].reason.as_deref().is_some_and(|r| r.contains("missing")));
+    assert!(prepared.availability.layers[0].reason.as_deref().is_some_and(|r| r.contains("缺失")));
     std::fs::remove_dir_all(root).ok();
 }
 
@@ -181,7 +181,7 @@ fn cog_tile_urls_are_checked_hidden_and_recovered() {
     let prepared = availability::prepare(&text, &sources).expect("prepare missing");
     assert_eq!(prepared.availability.unavailable, 1);
     assert_eq!(prepared.availability.layers[0].status, "unavailable");
-    assert_eq!(prepared.availability.layers[0].reason.as_deref(), Some("the file is missing"));
+    assert_eq!(prepared.availability.layers[0].reason.as_deref(), Some("文件缺失"));
     assert!(!tile_visible(&prepared.content), "an unavailable COG is hidden in the derived copy");
     assert_eq!(text, serde_json::to_string(&project).expect("json"), "preparing does not rewrite the stored project");
 

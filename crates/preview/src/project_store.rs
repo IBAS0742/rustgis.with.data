@@ -37,6 +37,9 @@ pub struct VersionMeta {
     pub id: String,
     #[serde(default)]
     pub parent: Option<String>,
+    /// Optional user-facing label shown instead of the raw ID. Older indexes have none.
+    #[serde(default)]
+    pub title: Option<String>,
     #[serde(default)]
     pub created_at_ms: u64,
     #[serde(default)]
@@ -51,6 +54,9 @@ pub struct WorkingCopyMeta {
     pub id: String,
     #[serde(default)]
     pub base_version: Option<String>,
+    /// Optional user-facing label shown instead of the raw ID.
+    #[serde(default)]
+    pub title: Option<String>,
     #[serde(default)]
     pub created_at_ms: u64,
     #[serde(default)]
@@ -63,6 +69,9 @@ pub struct WorkingCopyMeta {
 pub struct ProjectMeta {
     pub id: String,
     pub name: String,
+    /// Free-form remark or description. Editable; creation time is not.
+    #[serde(default)]
+    pub description: Option<String>,
     #[serde(default)]
     pub created_at_ms: u64,
     #[serde(default)]
@@ -126,7 +135,7 @@ impl ProjectStore {
 
     pub fn projects(&self) -> Vec<ProjectMeta> {
         let mut out: Vec<_> = self.projects.values().cloned().collect();
-        out.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms).then_with(|| a.name.cmp(&b.name)));
+        out.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms).then_with(|| a.name.cmp(&b.name)));
         out
     }
 
@@ -139,8 +148,14 @@ impl ProjectStore {
 
     /// Creates a project and publishes its first version. Without content, a new empty project is
     /// used, so every project starts with an immutable V1 rather than an unsaved state.
-    pub fn create_project(&mut self, name: &str, content: Option<String>) -> Result<ProjectContent, StoreError> {
+    pub fn create_project(
+        &mut self,
+        name: &str,
+        description: Option<&str>,
+        content: Option<String>,
+    ) -> Result<ProjectContent, StoreError> {
         let name = clean_name(name)?;
+        let description = clean_description(description);
         let text = match content {
             Some(text) => {
                 validate_project(&text)?;
@@ -154,10 +169,11 @@ impl ProjectStore {
         fs::create_dir_all(&versions)?;
         fs::create_dir_all(&working)?;
         let now = now_ms();
-        let version = publish_version(&versions, &ids::new_id("ver"), &text, None)?;
+        let version = publish_version(&versions, &ids::new_id("ver"), &text, None, None)?;
         let meta = ProjectMeta {
             id: id.clone(),
             name,
+            description,
             created_at_ms: now,
             updated_at_ms: now,
             versions: vec![version.clone()],
@@ -166,6 +182,29 @@ impl ProjectStore {
         write_index(&dir, &meta)?;
         self.projects.insert(id, meta.clone());
         Ok(ProjectContent { project: meta, version, content: text, read_only: true })
+    }
+
+    /// Updates editable metadata (name, description). Creation time is never touched; `None`
+    /// means "leave unchanged". An empty description clears the field. Returns the new metadata.
+    pub fn update_project_meta(
+        &mut self,
+        project: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+    ) -> Result<ProjectMeta, StoreError> {
+        let dir = self.project_dir(project)?;
+        let mut meta = self.project(project)?;
+        let now = now_ms();
+        if let Some(name) = name {
+            meta.name = clean_name(name)?;
+        }
+        if let Some(description) = description {
+            meta.description = clean_description(Some(description));
+        }
+        meta.updated_at_ms = now;
+        write_index(&dir, &meta)?;
+        self.projects.insert(meta.id.clone(), meta.clone());
+        Ok(meta)
     }
 
     pub fn versions(&self, project: &str) -> Result<Vec<VersionMeta>, StoreError> {
@@ -187,7 +226,12 @@ impl ProjectStore {
     }
 
     /// Copies a saved version into a new mutable working copy.
-    pub fn create_working_copy(&mut self, project: &str, version: &str) -> Result<WorkingCopy, StoreError> {
+    pub fn create_working_copy(
+        &mut self,
+        project: &str,
+        version: &str,
+        title: Option<&str>,
+    ) -> Result<WorkingCopy, StoreError> {
         let saved = self.read_version(project, version)?;
         let dir = self.project_dir(project)?;
         let working_dir = dir.join("working");
@@ -199,6 +243,7 @@ impl ProjectStore {
         let working = WorkingCopyMeta {
             id: id.clone(),
             base_version: Some(version.to_owned()),
+            title: clean_label(title),
             created_at_ms: now,
             updated_at_ms: now,
             size: saved.content.len() as u64,
@@ -231,7 +276,13 @@ impl ProjectStore {
 
     /// Saves a working copy as a new immutable version. Existing version names are never reused.
     /// The working file is updated first so a crash cannot lose edits that were already confirmed.
-    pub fn save_working_copy(&mut self, project: &str, working: &str, content: &str) -> Result<VersionMeta, StoreError> {
+    pub fn save_working_copy(
+        &mut self,
+        project: &str,
+        working: &str,
+        content: &str,
+        title: Option<&str>,
+    ) -> Result<VersionMeta, StoreError> {
         validate_project(content)?;
         if !ids::is_component(working) {
             return Err(StoreError::InvalidInput(format!("invalid working-copy id: {working}")));
@@ -248,7 +299,7 @@ impl ProjectStore {
         }
         let working_path = dir.join("working").join(format!("{working}.rgis"));
         rustgis_data::io::write_atomic(&working_path, content.as_bytes())?;
-        let version = publish_version(&dir.join("versions"), &ids::new_id("ver"), content, base)?;
+        let version = publish_version(&dir.join("versions"), &ids::new_id("ver"), content, base, clean_label(title))?;
         let now = now_ms();
         if let Some(w) = meta.working_copies.get_mut(w_index) {
             w.updated_at_ms = now;
@@ -285,7 +336,7 @@ impl ProjectStore {
         {
             return Err(StoreError::InvalidInput(format!("parent version not found: {parent}")));
         }
-        let published = publish_version(&dir.join("versions"), version, content, parent.map(str::to_owned))?;
+        let published = publish_version(&dir.join("versions"), version, content, parent.map(str::to_owned), None)?;
         meta.versions.push(published.clone());
         meta.updated_at_ms = now_ms();
         write_index(&dir, &meta)?;
@@ -349,7 +400,7 @@ fn load_project(dir: &Path, id: &str) -> Result<ProjectMeta, StoreError> {
                 changed = true;
             }
         } else {
-            meta.versions.push(VersionMeta { id: version_id, parent: None, created_at_ms: file_ms(&path), size: len, sha256: None });
+            meta.versions.push(VersionMeta { id: version_id, parent: None, title: None, created_at_ms: file_ms(&path), size: len, sha256: None });
             changed = true;
         }
     }
@@ -375,6 +426,7 @@ fn load_project(dir: &Path, id: &str) -> Result<ProjectMeta, StoreError> {
             meta.working_copies.push(WorkingCopyMeta {
                 id: working_id,
                 base_version: None,
+                title: None,
                 created_at_ms: at,
                 updated_at_ms: at,
                 size: len,
@@ -397,6 +449,7 @@ fn fresh_meta(id: &str) -> ProjectMeta {
     ProjectMeta {
         id: id.to_owned(),
         name: id.to_owned(),
+        description: None,
         created_at_ms: now,
         updated_at_ms: now,
         versions: Vec::new(),
@@ -413,7 +466,13 @@ fn write_index(dir: &Path, meta: &ProjectMeta) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn publish_version(dir: &Path, id: &str, text: &str, parent: Option<String>) -> Result<VersionMeta, StoreError> {
+fn publish_version(
+    dir: &Path,
+    id: &str,
+    text: &str,
+    parent: Option<String>,
+    title: Option<String>,
+) -> Result<VersionMeta, StoreError> {
     if !ids::is_component(id) {
         return Err(StoreError::InvalidInput(format!("invalid version id: {id}")));
     }
@@ -446,7 +505,7 @@ fn publish_version(dir: &Path, id: &str, text: &str, parent: Option<String>) -> 
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
     let sha256 = hex(&hasher.finalize());
-    Ok(VersionMeta { id: id.to_owned(), parent, created_at_ms: now_ms(), size, sha256: Some(sha256) })
+    Ok(VersionMeta { id: id.to_owned(), parent, title, created_at_ms: now_ms(), size, sha256: Some(sha256) })
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -519,6 +578,27 @@ fn clean_name(name: &str) -> Result<String, StoreError> {
         return Err(StoreError::InvalidInput("project name is too long or contains control characters".into()));
     }
     Ok(name.to_owned())
+}
+
+/// Trims an optional free-form text field. Empty becomes `None`.
+fn clean_description(text: Option<&str>) -> Option<String> {
+    let text = text?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    if text.len() > 2000 || text.chars().any(char::is_control) {
+        return None;
+    }
+    Some(text.to_owned())
+}
+
+/// Trims an optional short label (version / working-copy title). Empty becomes `None`.
+fn clean_label(text: Option<&str>) -> Option<String> {
+    let text = text?.trim();
+    if text.is_empty() || text.len() > 200 || text.chars().any(char::is_control) {
+        return None;
+    }
+    Some(text.to_owned())
 }
 
 fn files_with_extension(dir: &Path, ext: &str) -> Result<Vec<(String, PathBuf)>, StoreError> {

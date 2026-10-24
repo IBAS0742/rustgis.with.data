@@ -12,6 +12,7 @@
 - Docker：Docker `29.8.2`；`docker compose config --quiet` PASS；最终 Dockerfile（默认 BuildKit frontend，Cargo registry/git/target cache mount）构建 PASS。2026-10-24 最新构建镜像 `rustgis-preview:local` 的 manifest list 为 `sha256:d2064f373952827a930b4dd70d25fb81cffe003eaf288ff7968741e665d5bf83`，259,469,454 bytes；容器健康检查、`/`、`/map.html`、源浏览、Range、命名卷持久化和只读源目录挂载 PASS。最新镜像的 `/console.js` 已确认包含 64 MiB TIFF 上限和 COG tile 可见性恢复逻辑。本机 Docker Hub 直连不可用，基础镜像已预先从镜像站拉取并 tag 为官方名称；Dockerfile 仍引用官方镜像名。
 - 重要说明：验收末段 WSL 重启清空了 `/tmp` 测试数据。缺失图层恢复、PostGIS 详细场景来自重启前的实测记录；最终二进制随后在新建 home 上复测了创建 V1、只读限制、工作副本、添加 GeoJSON、保存 V2、Recheck、Range 和文件 API 方法限制。
 - 2026-10-24 补充：用验收辅助 Rust example（`crates/data/examples/make_preview_geotiff.rs`、`make_preview_cog.rs`）生成 486-byte、16×16、Float32、Deflate 的小型非 COG GeoTIFF，并在最终控制台完成“添加→渲染→保存 V2→只读重开”实测；同时生成 1,377,006-byte 的 COG，确认它被保存为 `maps[].tiles` 的 URL 流式图层，并验证了删除源文件→不可用/隐藏、恢复文件→可用/可见、以及隐藏状态下保存工作副本不会把 `visible:false` 写进新版本。非 COG TIFF 会被整文件下载并以 embedded bytes 写入工程，因此源浏览器新增了 64 MiB TIFF 上限；大 TIFF 性能仍未验证。
+- 2026-10-24 交互重构与中文化（浏览器自动化实测，数据目录 `/home/ubuntu/rustgis-preview/home`）：新建工程现在直接创建并打开工作副本（服务端仍保留空 V1 作为基线）；未打开工程时点击“添加图层”会自动创建“未命名工程”并进入工作副本；在只读版本上添加图层会自动复制出工作副本。控制台界面与图层可用性 reason 全部中文化（status 枚举值保留英文作为 API 稳定值，由前端映射为中文标签）。实测路径：无工程直接添加 `points.geojson` → 自动建工程并进入工作副本 → 保存发布新版本（2365 字节，含 1 图层）→ 只读重开确认“只读版本”徽标、保存按钮禁用、复制按钮可用、reason 显示中文。`cargo test -p rustgis-preview`（35 项）与 `cargo clippy -p rustgis-preview --all-targets` 通过；`server.rs` 控制台标记断言与 `availability.rs` 测试的 reason 断言随中文化同步更新。已知限制：嵌入式地图（`apps/rustgis-web` 上游 WASM 应用）自身界面仍为英文（上游无 i18n 机制）；`error.rs` 的 API 错误消息仍为英文。
 
 ## A. 工程版本
 
@@ -90,3 +91,17 @@
 - 3/10/20 会话并发压力、长时间扫描/数据库断开的交互稳定性。
 
 在这些项目完成实测前，发布说明必须保留相应的 **NOT RUN** 标记，不得用推测代替结果。
+
+## 2026-10-24 交互模型重构(草稿优先 + 工程元数据)
+
+按用户 7 项需求重构,浏览器自动化实测(数据目录 `/home/ubuntu/rustgis-preview/home`,旧测试工程已按用户要求清除,数据源配置保留):
+
+1. 打开页面默认无工程、草稿模式,可直接添加图层;`beforeunload` 在草稿有内容或工作副本有未保存修改时提醒。 — **PASS**(草稿添加 `points.geojson` → "有未保存的内容";监听器注册已验证)
+2. 草稿经「保存为工程…」弹窗填写名称/描述后创建 V1 并继续编辑。 — **PASS**(工程「城市监测底图」创建成功,描述落库)
+3. 打开版本默认只读。 — **PASS**("只读版本"徽标,保存按钮禁用)
+4. 工作副本可编辑、可保存。 — **PASS**
+5. 复制/保存新版本均弹窗填写标题,不再以裸 ID 展示。 — **PASS**(「野外调绘副本」「调绘成果版」在卡片中正确显示)
+6. 卡片按工程创建时间排序、分组显示工程(名称/描述/创建·更新时间)与版本(V 编号+标题+时间)、工作副本(标题+基于版本)。 — **PASS**(服务端 `projects()` 改为 created_at 排序,`projects_are_listed_by_creation_time` 测试)
+7. 工程信息(名称/备注)可编辑,创建时间不可变。 — **PASS**(PATCH 后 created_at 不变、updated_at 前移;`project_metadata_is_editable_with_titles_and_survives_restart` 与 HTTP 层 `project_metadata_is_editable_over_the_api` 测试)
+
+服务端新增:`ProjectMeta.description`、`VersionMeta/WorkingCopyMeta.title`(serde default,旧索引兼容)、`PATCH /api/projects/{id}`、创建/复制/保存接口接受 title 与 description。测试:`cargo test -p rustgis-preview` 38 项全部通过。修复过程中发现并修正弹窗 `modal-title` id 与标题冲突导致提交静默失败的缺陷。已知限制:关闭页面的浏览器原生提醒弹窗在自动化中未逐一手动确认(监听器与状态逻辑已验证);嵌入式地图 WASM 应用界面仍为英文。

@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RustGIS Preview</title>
+<title>RustGIS 预览</title>
 <style>
 :root{--bg:#f4f6f8;--panel:#fff;--ink:#17202a;--muted:#687684;--line:#d9e0e7;--accent:#146c94;--accent2:#0f526f;--danger:#a83232;--ok:#2d6a4f;--warn:#8a5a00;--shadow:0 1px 3px rgba(20,40,60,.09)}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
 header{height:52px;display:flex;align-items:center;gap:12px;padding:0 16px;background:#102a3a;color:#fff;box-shadow:var(--shadow);position:relative;z-index:2}
 header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}.grow{flex:1}
 .dot{width:8px;height:8px;border-radius:50%;background:#8fa3b1;display:inline-block;margin-right:6px}.dot.ok{background:#52c41a}.dot.bad{background:#ff7875}
@@ -26,30 +26,36 @@ main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:
 .tree{margin:6px 0}.schema{border-top:1px solid #edf1f4;padding:6px 0}.schema h4{margin:0 0 4px;font-size:12px}.rel{padding:3px 0 3px 8px}.rel .name{font-size:12px}.cols{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}.cols button{font-size:11px;padding:2px 6px}
 #toast{position:fixed;right:16px;bottom:16px;max-width:min(520px,calc(100% - 32px));background:#17202a;color:#fff;border-radius:8px;padding:10px 12px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.22);opacity:0;transform:translateY(10px);pointer-events:none;transition:.18s;z-index:10;white-space:pre-wrap}#toast.show{opacity:1;transform:none}#toast.error{background:#7a1f1f}
 #build-note{display:none}
+.modal{position:fixed;inset:0;background:rgba(16,42,58,.45);display:flex;align-items:center;justify-content:center;z-index:20;padding:20px}.modal-box{background:#fff;border-radius:10px;box-shadow:var(--shadow);max-width:460px;width:100%;padding:16px}.modal-box h3{margin:0 0 10px;font-size:15px}.modal-box .field{margin:0 0 10px}.modal-box textarea{font:inherit;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:#fff;color:var(--ink);width:100%;min-height:64px;resize:vertical}.modal-box .row{margin-top:12px}
+.time{color:var(--ink);font-weight:600}
+.vtitle{font-size:12.5px}
+.card h3{font-size:14px}
+.proj-desc{margin:2px 0 4px;color:#3c4a58;font-size:12.5px;overflow-wrap:anywhere}
 @media(max-width:900px){.app{grid-template-columns:1fr;grid-template-rows:46% 54%}aside{order:2;border-right:0;border-top:1px solid var(--line)}main.map{order:1}.availability{max-height:150px}.panels{padding:9px}}
 </style>
 </head>
 <body>
 <header>
-  <h1>RustGIS Preview</h1>
-  <span class="meta" id="server-status"><span class="dot" id="health-dot"></span><span id="health-text">connecting…</span></span>
+  <h1>RustGIS 预览</h1>
+  <span class="meta" id="server-status"><span class="dot" id="health-dot"></span><span id="health-text">连接中…</span></span>
   <span class="grow"></span>
-  <span class="meta" id="home-note">Self-hosted · no accounts · keep on localhost or trusted LAN</span>
-  <button id="refresh-all" type="button">Refresh</button>
+  <span class="meta" id="home-note">自托管 · 无账号体系 · 请保持在 localhost 或可信内网使用</span>
+  <button id="refresh-all" type="button">刷新</button>
 </header>
 
 <div class="app">
   <aside>
     <div class="tabs" role="tablist">
-      <button class="active" data-tab="projects" type="button">Projects</button>
-      <button data-tab="sources" type="button">Sources</button>
-      <button data-tab="databases" type="button">Databases</button>
+      <button class="active" data-tab="projects" type="button">工程</button>
+      <button data-tab="sources" type="button">数据源</button>
+      <button data-tab="databases" type="button">数据库</button>
     </div>
     <div class="panels">
       <section class="panel active" id="panel-projects">
         <div class="form">
-          <label for="new-project-name">New project</label>
-          <div class="row"><input id="new-project-name" placeholder="Project name"><button class="primary" id="create-project" type="button">Create V1</button></div>
+          <label for="new-project-name">新建工程</label>
+          <div class="row"><input id="new-project-name" placeholder="工程名称"><button class="primary" id="create-project" type="button">新建工程</button></div>
+          <p class="meta" style="margin:6px 0 0">也可以不新建,直接往地图加数据,之后点「保存为工程」;草稿关闭页面前会提醒保存。</p>
         </div>
         <div id="project-list" class="small"></div>
         <div id="project-detail" style="display:none"></div>
@@ -57,10 +63,10 @@ main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:
 
       <section class="panel" id="panel-sources">
         <div class="form">
-          <label for="source-path">Add a server directory (must already exist)</label>
-          <input id="source-path" placeholder="/data/gis or C:\GIS\data">
-          <div class="row" style="margin-top:6px"><input id="source-name" placeholder="Display name (optional)"><button class="primary" id="add-source" type="button">Add</button></div>
-          <p class="meta" style="margin:6px 0 0">The browser never supplies arbitrary paths to the file API; every file is resolved inside one of these roots.</p>
+          <label for="source-path">添加服务器目录(需已存在)</label>
+          <input id="source-path" placeholder="/data/gis 或 C:\GIS\data">
+          <div class="row" style="margin-top:6px"><input id="source-name" placeholder="显示名称(可选)"><button class="primary" id="add-source" type="button">添加</button></div>
+          <p class="meta" style="margin:6px 0 0">浏览器不能提交任意路径;所有文件访问都被限制在这些根目录之内。</p>
         </div>
         <div id="source-list"></div>
         <div id="source-browser" style="display:none"></div>
@@ -68,12 +74,12 @@ main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:
 
       <section class="panel" id="panel-databases">
         <div class="form">
-          <label>Add PostgreSQL/PostGIS connection</label>
-          <div class="row"><input id="db-host" value="127.0.0.1" placeholder="host" style="flex:2"><input id="db-port" value="5432" placeholder="port" style="flex:1"></div>
-          <div class="row" style="margin-top:5px"><input id="db-user" placeholder="username" style="flex:1"><input id="db-password" type="password" autocomplete="off" placeholder="password (memory only)" style="flex:1"></div>
-          <div class="row" style="margin-top:5px"><input id="db-name" placeholder="default database (optional)" style="flex:1"><select id="db-ssl" style="flex:1"><option value="prefer">prefer</option><option value="require">require</option><option value="disable">disable</option></select></div>
-          <div class="row" style="margin-top:5px"><input id="db-label" placeholder="display name (optional)"><button class="primary" id="add-database" type="button">Add</button></div>
-          <p class="meta" style="margin:6px 0 0">Passwords are kept in server memory only. After a restart the configuration remains and the password is requested again. It is never written to project JSON, URLs or responses.</p>
+          <label>添加 PostgreSQL/PostGIS 连接</label>
+          <div class="row"><input id="db-host" value="127.0.0.1" placeholder="主机" style="flex:2"><input id="db-port" value="5432" placeholder="端口" style="flex:1"></div>
+          <div class="row" style="margin-top:5px"><input id="db-user" placeholder="用户名" style="flex:1"><input id="db-password" type="password" autocomplete="off" placeholder="密码(仅存于内存)" style="flex:1"></div>
+          <div class="row" style="margin-top:5px"><input id="db-name" placeholder="默认数据库(可选)" style="flex:1"><select id="db-ssl" style="flex:1"><option value="prefer">prefer(默认)</option><option value="require">require</option><option value="disable">disable</option></select></div>
+          <div class="row" style="margin-top:5px"><input id="db-label" placeholder="显示名称(可选)"><button class="primary" id="add-database" type="button">添加</button></div>
+          <p class="meta" style="margin:6px 0 0">密码仅保存在服务进程内存中。服务重启后配置保留,需重新输入密码;密码不会写入工程、URL 或日志。</p>
         </div>
         <div id="database-list"></div>
         <div id="database-catalog" style="display:none"></div>
@@ -83,34 +89,45 @@ main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:
 
   <main class="map">
     <div class="mapbar">
-      <span class="title" id="map-project">No project open</span>
-      <span class="badge" id="map-mode">blank map</span>
+      <span class="title" id="map-project">未打开工程</span>
+      <span class="badge" id="map-mode">空白地图</span>
       <span class="meta" id="map-dirty"></span>
       <span class="grow"></span>
-      <button id="copy-version" type="button" disabled>Edit as working copy</button>
-      <button class="primary" id="save-version" type="button" disabled>Save new version</button>
+      <button id="copy-version" type="button" disabled>复制为工作副本</button>
+      <button class="primary" id="save-version" type="button" disabled>保存新版本</button>
+      <button class="primary" id="save-scratch" type="button" style="display:none">保存为工程…</button>
     </div>
     <div class="mapwrap">
-      <iframe id="map" src="/map.html?embed" title="RustGIS map"></iframe>
+      <iframe id="map" src="/map.html?embed" title="RustGIS 地图"></iframe>
       <div class="overlay" id="map-overlay" style="display:none">
         <div class="box">
-          <h2>Map build not available</h2>
-          <p>The API and this console are running, but <code>apps/rustgis-web/dist</code> was not found. Build the RustGIS web app and restart the server with <code>RUSTGIS_PREVIEW_WEB_DIR</code> pointing at its <code>dist</code> directory.</p>
+          <h2>地图构建不可用</h2>
+          <p>API 和控制台正在运行,但没有找到 <code>apps/rustgis-web/dist</code>。请先构建 RustGIS 网页应用,再用 <code>RUSTGIS_PREVIEW_WEB_DIR</code> 指向其 <code>dist</code> 目录并重启服务。</p>
           <pre class="mono">cd apps/rustgis-web
 ./build-preview.sh
 cd ../..
 RUSTGIS_PREVIEW_WEB_DIR=apps/rustgis-web/dist cargo run -p rustgis-preview-server</pre>
-          <p class="meta" id="build-note">You can still inspect projects, sources and database catalogs from the left panel.</p>
+          <p class="meta" id="build-note">你仍可在左侧面板查看工程、数据源和数据库目录。</p>
         </div>
       </div>
     </div>
     <div class="availability" id="availability" style="display:none">
-      <div class="row"><h2 class="grow" style="margin:0">Layer availability</h2><button id="recheck" type="button">Recheck</button></div>
+      <div class="row"><h2 class="grow" style="margin:0">图层可用性</h2><button id="recheck" type="button">重新检查</button></div>
       <div id="availability-list"></div>
     </div>
   </main>
 </div>
 <div id="toast" role="status"></div>
+<div class="modal" id="modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="modal-heading"></h3>
+    <div id="modal-fields"></div>
+    <div class="row end">
+      <button id="modal-cancel" type="button">取消</button>
+      <button class="primary" id="modal-ok" type="button">确定</button>
+    </div>
+  </div>
+</div>
 <script src="/console.js"></script>
 </body>
 </html>

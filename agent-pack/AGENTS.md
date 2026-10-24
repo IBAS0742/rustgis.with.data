@@ -31,6 +31,7 @@ Read these files before coding:
 1. 在仓库根目录 `RustGIS/` 生成提交脚本,命名为 `NNN-<简短英文标识>-gitcommit.bat`:
    - `NNN` 为三位递增序号:取仓库根目录现有 `NNN-*-gitcommit.bat` 的最大序号加一;没有则从 `001` 开始。
    - 复制 `RustGIS/agent-pack/gitcommit-template.bat` 生成,把 `__COMMIT_MSG__` 替换为本阶段的真实提交信息;不要改动脚本其他结构。
+   - 把 `__ADD_PATHS__` 替换为本阶段实际改动的文件/目录列表;仅当确认没有其他未提交改动时才可使用 `-A`,避免把其他阶段的待提交内容卷进本阶段的提交。
 2. 提交信息必须单行,且不得包含 `%` `!` `&` `|` `<` `>` `^` 等批处理特殊字符。
 3. 脚本行为(模板已实现):`git add -A` → `git commit` → `git push -u origin HEAD`;任一步失败会保留脚本并提示错误;全部成功后删除自身。再次双击会自动跳过已完成的步骤,因此失败后修复配置再双击即可续跑。
 4. 这些脚本已被仓库 `.gitignore` 忽略(`/[0-9][0-9][0-9]-*-gitcommit.bat`),不会进入提交内容。

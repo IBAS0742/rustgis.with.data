@@ -171,10 +171,10 @@ fn checked(kind: &'static str, status: &'static str, reason: impl Into<String>) 
 fn check_layer(layer: &Layer, sources: &SourceRegistry) -> LayerCheck {
     if let Some(raster) = &layer.raster {
         if raster.embedded.is_some() {
-            return checked("embedded", "available", "the raster is embedded in the project");
+            return checked("embedded", "available", "栅格内嵌在工程中");
         }
         let Some(path) = raster.path.as_deref() else {
-            return checked("raster", "unavailable", "the raster has no path and no embedded data");
+            return checked("raster", "unavailable", "栅格既没有路径也没有内嵌数据");
         };
         return from_reference(source_check(sources, path), "raster");
     }
@@ -183,7 +183,7 @@ fn check_layer(layer: &Layer, sources: &SourceRegistry) -> LayerCheck {
             return checked(
                 "embedded",
                 "available",
-                "the source is embedded in the project; the original data is not needed to display it",
+                "数据源内嵌在工程中;显示时不需要原始数据",
             );
         }
         if let Some(path) = source.path.as_deref() {
@@ -191,38 +191,38 @@ fn check_layer(layer: &Layer, sources: &SourceRegistry) -> LayerCheck {
         }
         if source.postgis.is_some() {
             if !layer.dataset.features.is_empty() {
-                return checked("postgis", "available", "the stored snapshot contains features; the live table is not queried");
+                return checked("postgis", "available", "存储的快照包含要素;不会查询数据库中的原表");
             }
             return checked(
                 "postgis",
                 "unavailable",
-                "live PostGIS layers are not available in the browser preview; add a bounded snapshot from the database browser",
+                "浏览器预览不支持实时 PostGIS 图层;请在数据库浏览器中添加有界快照",
             );
         }
         if source.mysql.is_some() || source.sqlserver.is_some() || source.duckdb.is_some() {
             if !layer.dataset.features.is_empty() {
-                return checked("database", "available", "the project contains a stored copy of the features");
+                return checked("database", "available", "工程中保存了要素副本");
             }
-            return checked("database", "unavailable", "this database provider is not available in the browser preview");
+            return checked("database", "unavailable", "该数据库 provider 在浏览器预览中不可用");
         }
         if source.gdal.is_some() {
             if !layer.dataset.features.is_empty() {
-                return checked("embedded", "available", "the project contains a stored copy of the features");
+                return checked("embedded", "available", "工程中保存了要素副本");
             }
-            return checked("file", "unavailable", "GDAL-backed layers are not available in the browser preview");
+            return checked("file", "unavailable", "GDAL 后端的图层在浏览器预览中不可用");
         }
         if !layer.dataset.features.is_empty() {
-            return checked("embedded", "available", "features are stored in the project");
+            return checked("embedded", "available", "要素存储在工程中");
         }
-        return checked("empty", "unavailable", "the streamed source has no path, embedded data or features");
+        return checked("empty", "unavailable", "流式数据源没有路径、内嵌数据或要素");
     }
-    checked("embedded", "available", "the layer and its features are stored in the project")
+    checked("embedded", "available", "图层及其要素存储在工程中")
 }
 
 fn check_tile(tile: &TileLayer, sources: &SourceRegistry) -> LayerCheck {
     match sources.check_file_url(&tile.url) {
         Some(check) => from_reference(check, "cog"),
-        None => checked("cog", "unknown", "remote tile URLs are not checked by the server"),
+        None => checked("cog", "unknown", "服务端不检查远程瓦片 URL"),
     }
 }
 
