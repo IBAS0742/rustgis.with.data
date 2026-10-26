@@ -65,6 +65,27 @@ pub struct WorkingCopyMeta {
     pub size: u64,
 }
 
+/// Pairing record for one layer of an imported project. `Unpaired` layers stay unavailable in
+/// the map until the operator pairs them (the datasource string is kept for that).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ImportLayerMeta {
+    pub name: String,
+    pub kind: String,
+    pub status: String,
+    pub qgis_datasource: String,
+    pub target: Option<String>,
+    pub style_note: String,
+}
+
+/// Where a project came from, when it was imported from another application.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ImportMeta {
+    pub app: String,
+    pub file_name: String,
+    pub imported_at_ms: u64,
+    pub layers: Vec<ImportLayerMeta>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProjectMeta {
     pub id: String,
@@ -80,6 +101,9 @@ pub struct ProjectMeta {
     pub versions: Vec<VersionMeta>,
     #[serde(default)]
     pub working_copies: Vec<WorkingCopyMeta>,
+    /// Set when this project was imported (e.g. from QGIS); pairs layers to data sources.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub import: Option<ImportMeta>,
 }
 
 /// A saved version's text. It is read-only: the API never accepts its ID as a write target.
@@ -178,6 +202,7 @@ impl ProjectStore {
             updated_at_ms: now,
             versions: vec![version.clone()],
             working_copies: Vec::new(),
+            import: None,
         };
         write_index(&dir, &meta)?;
         self.projects.insert(id, meta.clone());
@@ -205,6 +230,40 @@ impl ProjectStore {
         write_index(&dir, &meta)?;
         self.projects.insert(meta.id.clone(), meta.clone());
         Ok(meta)
+    }
+
+    /// Records where an imported project came from and how each layer is bound.
+    pub fn set_import_meta(&mut self, project: &str, import: ImportMeta) -> Result<ProjectMeta, StoreError> {
+        let dir = self.project_dir(project)?;
+        let mut meta = self.project(project)?;
+        meta.import = Some(import);
+        write_index(&dir, &meta)?;
+        self.projects.insert(meta.id.clone(), meta.clone());
+        Ok(meta)
+    }
+
+    /// Writes new content into a working copy without publishing a version (pairing edits the
+    /// copy in place; the operator publishes when ready). The file is written atomically.
+    pub fn save_working_copy_content(&mut self, project: &str, working: &str, content: &str) -> Result<(), StoreError> {
+        validate_project(content)?;
+        if !ids::is_component(working) {
+            return Err(StoreError::InvalidInput(format!("invalid working-copy id: {working}")));
+        }
+        let dir = self.project_dir(project)?;
+        let mut meta = self.project(project)?;
+        let index =
+            meta.working_copies.iter().position(|w| w.id == working).ok_or_else(|| StoreError::WorkingCopyNotFound(working.to_owned()))?;
+        let working_path = dir.join("working").join(format!("{working}.rgis"));
+        rustgis_data::io::write_atomic(&working_path, content.as_bytes())?;
+        let now = now_ms();
+        if let Some(w) = meta.working_copies.get_mut(index) {
+            w.updated_at_ms = now;
+            w.size = content.len() as u64;
+        }
+        meta.updated_at_ms = now;
+        write_index(&dir, &meta)?;
+        self.projects.insert(project.to_owned(), meta);
+        Ok(())
     }
 
     pub fn versions(&self, project: &str) -> Result<Vec<VersionMeta>, StoreError> {
@@ -454,6 +513,7 @@ fn fresh_meta(id: &str) -> ProjectMeta {
         updated_at_ms: now,
         versions: Vec::new(),
         working_copies: Vec::new(),
+        import: None,
     }
 }
 

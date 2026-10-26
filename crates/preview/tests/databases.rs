@@ -1,5 +1,7 @@
-//! Phase 5 non-secret persistence and password-required behavior. A live PostGIS server is not
-//! required for these checks; catalog queries themselves need external infrastructure.
+//! Database persistence behaviour. Since 2026-10-25 a password given at save time is
+//! persisted with the connection (explicit product decision); connections saved without one
+//! ask for the password again on every start. A live PostGIS server is not required for these
+//! checks; supplied passwords are verified against the server, which is unreachable here.
 
 use std::path::PathBuf;
 
@@ -27,17 +29,16 @@ fn add(registry: &mut DatabaseRegistry, password: Option<&str>) -> rustgis_previ
 }
 
 #[test]
-fn password_is_only_in_memory_and_never_written_to_config() {
+fn a_password_given_at_save_time_is_persisted_and_restored() {
     let (root, home) = temp_home("secret");
     let mut registry = DatabaseRegistry::open(home.clone()).expect("open");
     let view = add(&mut registry, Some("correct horse battery staple"));
-    assert!(!view.password_required);
+    assert!(!view.password_required, "a saved password means no prompt");
     let config = std::fs::read_to_string(home.config().join("databases.json")).expect("config file");
-    assert!(!config.contains("correct horse battery staple"), "password must never be persisted");
-    assert!(!config.contains("password\":\""), "only the password_required flag may be written");
+    assert!(config.contains("correct horse battery staple"), "the save-time password is persisted");
     assert!(config.contains("127.0.0.1"));
-    assert!(config.contains("\"password_required\": true"));
 
+    // The secret never leaks through any API view.
     let json = serde_json::to_string(&registry.views()).expect("serialize views");
     assert!(!json.contains("correct horse battery staple"));
     assert!(!json.contains("\"password\""));
@@ -46,26 +47,30 @@ fn password_is_only_in_memory_and_never_written_to_config() {
     let registry = DatabaseRegistry::open(home).expect("reopen");
     let after = registry.views();
     assert_eq!(after.len(), 1);
-    assert!(after[0].password_required, "a restart requires the password again");
-    let err = registry.databases(&after[0].id).expect_err("no in-memory password after restart");
-    assert!(matches!(err, StoreError::PasswordRequired(_)));
+    assert!(!after[0].password_required, "a persisted password survives the restart");
 
     std::fs::remove_dir_all(root).ok();
 }
 
 #[test]
-fn supplying_a_password_clears_the_required_flag_without_changing_the_model() {
+fn a_passwordless_connection_asks_again_and_tests_before_accepting() {
     let (root, home) = temp_home("supply");
     let mut registry = DatabaseRegistry::open(home.clone()).expect("open");
-    let view = add(&mut registry, Some("first"));
+    let view = add(&mut registry, None);
+    assert!(view.password_required, "no stored password means the console asks");
+
     drop(registry);
     let mut registry = DatabaseRegistry::open(home.clone()).expect("reopen");
-    assert!(registry.views()[0].password_required);
-    let updated = registry.set_password(&view.id, "second").expect("set password");
-    assert!(!updated.password_required);
+    assert!(registry.views()[0].password_required, "still asking after a restart");
+
+    // The supplied password is tested against the server first. No server is running here,
+    // so the attempt must fail and nothing may be retained for the session.
+    let err = registry.set_password(&view.id, "session-secret").expect_err("unreachable server");
+    assert!(!matches!(err, StoreError::InvalidInput(_)), "the failure comes from the probe, not validation: {err:?}");
+    assert!(registry.views()[0].password_required, "a failed test keeps asking");
     let config = std::fs::read_to_string(home.config().join("databases.json")).expect("config");
-    assert!(!config.contains("second"));
-    assert!(!registry.views()[0].password_required);
+    assert!(!config.contains("session-secret"), "a session password is never written");
+
     std::fs::remove_dir_all(root).ok();
 }
 

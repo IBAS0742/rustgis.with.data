@@ -1,8 +1,10 @@
 //! PostgreSQL/PostGIS connection configuration and catalog browsing.
 //!
-//! Passwords are held only in this process's memory. The persisted file contains host, port, user,
-//! SSL mode and database name, never a password. After a restart the connection is still listed,
-//! but browsing returns a clear "password required" response until the operator supplies it again.
+//! By explicit product decision (2026-10-25) a password entered when the connection is saved is
+//! persisted in `databases.json` and restored on start. Connections saved without a password keep
+//! the old behaviour: the secret is held in process memory only and the console asks again after
+//! every page refresh. Passwords are tested against the server before they are accepted and are
+//! never included in API views, logs or URLs.
 
 use std::collections::HashMap;
 use std::fs;
@@ -19,7 +21,8 @@ use crate::ids;
 const FORMAT: u32 = 1;
 const MAX_CONFIG_BYTES: u64 = 4 << 20;
 
-/// Persisted, non-secret connection settings.
+/// Persisted connection settings. By explicit product decision the password given at save
+/// time is persisted here too; it is still never returned by any API view, log or URL.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DatabaseConnection {
     pub id: String,
@@ -32,13 +35,19 @@ pub struct DatabaseConnection {
     /// A default database for the connection; individual catalog requests can select another.
     #[serde(default)]
     pub database: Option<String>,
-    /// Whether this connection used a password. It is a flag, not the secret.
+    /// The secret saved when the connection was created. `None` means the operator chose not
+    /// to store one; the console then asks for it again on every page load (session-only).
+    #[serde(default)]
+    pub password: Option<String>,
+    /// Legacy flag from the pre-persistence format: this connection authenticated with a
+    /// password that was held in memory only.
     #[serde(default)]
     pub password_required: bool,
     pub created_at_ms: u64,
 }
 
-/// What the API may return: connection settings plus whether a password is currently in memory.
+/// What the API may return: connection settings plus whether a password is needed right now.
+/// The secret itself is never part of any view.
 #[derive(Clone, Debug, Serialize)]
 pub struct DatabaseView {
     pub id: String,
@@ -134,7 +143,9 @@ impl DatabaseRegistry {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(e) => return Err(e.into()),
         };
-        Ok(DatabaseRegistry { home, connections, passwords: HashMap::new() })
+        // Persisted passwords become immediately usable again after a restart.
+        let passwords = connections.iter().filter_map(|c| c.password.clone().map(|p| (c.id.clone(), p))).collect();
+        Ok(DatabaseRegistry { home, connections, passwords })
     }
 
     pub fn views(&self) -> Vec<DatabaseView> {
@@ -164,6 +175,8 @@ impl DatabaseRegistry {
             });
         let display_name = clean_field(&display_name, "display name", 200)?;
         let password = input.password.filter(|p| !p.is_empty());
+        // A password given at save time is recorded as-is (product decision). It is verified
+        // the first time the connection is used; the operator can override it per session.
         let connection = DatabaseConnection {
             id: ids::new_id("db"),
             display_name,
@@ -172,13 +185,14 @@ impl DatabaseRegistry {
             username,
             ssl_mode,
             database,
-            password_required: password.is_some(),
+            password,
+            password_required: false,
             created_at_ms: now_ms(),
         };
-        self.connections.push(connection.clone());
-        if let Some(password) = password {
+        if let Some(password) = connection.password.clone() {
             self.passwords.insert(connection.id.clone(), password);
         }
+        self.connections.push(connection.clone());
         if let Err(e) = self.save() {
             self.connections.retain(|c| c.id != connection.id);
             self.passwords.remove(&connection.id);
@@ -194,18 +208,16 @@ impl DatabaseRegistry {
         self.save()
     }
 
-    /// Supplies a password after a restart. It is kept in memory only.
+    /// Supplies the password for a connection that was saved without one. The value is tested
+    /// against the server first; on failure nothing is kept and the user may retry. It stays in
+    /// memory for this process only, so a page refresh asks again, as designed.
     pub fn set_password(&mut self, id: &str, password: &str) -> Result<DatabaseView, StoreError> {
-        let mut c = (*self.connection(id)?).clone();
+        let c = (*self.connection(id)?).clone();
         if password.is_empty() {
             return Err(StoreError::InvalidInput("password is empty".into()));
         }
+        probe(&c.host, c.port, &c.username, Some(password), &c.ssl_mode, c.database.as_deref())?;
         self.passwords.insert(id.to_owned(), password.to_owned());
-        c.password_required = true;
-        if let Some(stored) = self.connections.iter_mut().find(|x| x.id == id) {
-            stored.password_required = true;
-        }
-        self.save()?;
         Ok(self.view(&c))
     }
 
@@ -263,11 +275,13 @@ impl DatabaseRegistry {
     }
 
     /// Connects to a selected database, or the connection's default when `database` is None.
-    /// Returns only errors whose text is safe to show to the client (no DSN, no password).
+    /// The session-supplied password wins over the persisted one. Returns only errors whose
+    /// text is safe to show to the client (no DSN, no password).
     pub fn connect(&self, id: &str, database: Option<&str>) -> Result<Arc<postgis::Conn>, StoreError> {
         let c = self.connection(id)?;
-        let password = self.passwords.get(id).map(String::as_str);
-        if c.password_required && password.is_none() {
+        let session = self.passwords.get(id).cloned();
+        let password = session.as_deref().or(c.password.as_deref());
+        if c.password_required && c.password.is_none() && password.is_none() {
             return Err(StoreError::PasswordRequired(format!("connection {} needs its password again", c.display_name)));
         }
         let dsn = dsn_for(c, database)?;
@@ -290,7 +304,8 @@ impl DatabaseRegistry {
             username: c.username.clone(),
             ssl_mode: c.ssl_mode.clone(),
             database: c.database.clone(),
-            password_required: c.password_required && !self.passwords.contains_key(&c.id),
+            // No persisted password and nothing supplied this session: the console asks again.
+            password_required: c.password.is_none() && !self.passwords.contains_key(&c.id),
             created_at_ms: c.created_at_ms,
         }
     }
@@ -312,6 +327,26 @@ fn dsn_for(c: &DatabaseConnection, database: Option<&str>) -> Result<String, Sto
         dsn.push_str(&format!(" dbname={}", libpq_value(&database)));
     }
     Ok(dsn)
+}
+
+/// Verifies credentials by opening a real connection and issuing the cheapest useful query
+/// (listing databases). Used before a password is accepted, so stored connections are known
+/// to work. Errors are sanitised like every other database failure.
+fn probe(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: Option<&str>,
+    ssl_mode: &str,
+    database: Option<&str>,
+) -> Result<(), StoreError> {
+    let mut dsn = format!("host={} port={} user={} sslmode={}", libpq_value(host), port, libpq_value(username), libpq_value(ssl_mode));
+    if let Some(database) = database {
+        let database = clean_field(database, "database", 128)?;
+        dsn.push_str(&format!(" dbname={}", libpq_value(&database)));
+    }
+    let conn = postgis::connect_with_password(&dsn, password).map_err(|e| db_error(e.to_string()))?;
+    postgis::databases(&conn).map_err(|e| db_error(e.to_string())).map(|_| ())
 }
 
 /// Quotes a value for a libpq key/value connection string. No password ever enters this function.
@@ -385,6 +420,7 @@ mod tests {
             username: "gis user".into(),
             ssl_mode: "require".into(),
             database: database.map(str::to_owned),
+            password: None,
             password_required: true,
             created_at_ms: 0,
         }

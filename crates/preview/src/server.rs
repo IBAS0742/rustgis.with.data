@@ -16,7 +16,8 @@ use tiny_http::{Header, Method, Request, Response, ResponseBox, Server, StatusCo
 
 use crate::StoreError;
 use crate::databases::{DatabaseRegistry, NewDatabase};
-use crate::project_store::MAX_PROJECT_BYTES;
+use crate::import::MatchStatus;
+use crate::project_store::{ImportLayerMeta, ImportMeta, MAX_PROJECT_BYTES};
 use crate::sources::SourceRegistry;
 use crate::{DataHome, ProjectStore};
 
@@ -28,10 +29,20 @@ const MAX_IN_FLIGHT: usize = 32;
 /// JSON and project uploads are bounded; the static file handler has its own size policy.
 const MAX_API_BODY: usize = MAX_PROJECT_BYTES + (1 << 20);
 
+/// A parsed QGIS file held between the preview (parse) and the confirm (create) step. Tokens are
+/// single-use; the raw file is dropped as soon as the plan is built.
+struct CachedImport {
+    file_name: String,
+    plan: crate::import::ImportPlan,
+    matches: Vec<crate::import::MatchStatus>,
+    created_at_ms: u64,
+}
+
 struct App {
     projects: Mutex<ProjectStore>,
     sources: Mutex<SourceRegistry>,
     databases: Mutex<DatabaseRegistry>,
+    imports: Mutex<std::collections::HashMap<String, CachedImport>>,
     web_dir: Option<PathBuf>,
 }
 
@@ -80,7 +91,13 @@ pub fn run_at(home: DataHome, bind: &str, web_dir: Option<PathBuf>) -> Result<()
     let sources = SourceRegistry::open(home.clone()).map_err(|e| format!("open source registry: {e}"))?;
     let databases = DatabaseRegistry::open(home).map_err(|e| format!("open database registry: {e}"))?;
     let web_dir = web_dir.and_then(|dir| fs::canonicalize(dir).ok()).filter(|dir| dir.is_dir());
-    let app = Arc::new(App { projects: Mutex::new(store), sources: Mutex::new(sources), databases: Mutex::new(databases), web_dir });
+    let app = Arc::new(App {
+        projects: Mutex::new(store),
+        sources: Mutex::new(sources),
+        databases: Mutex::new(databases),
+        imports: Mutex::new(std::collections::HashMap::new()),
+        web_dir,
+    });
     let server = Server::http(bind).map_err(|e| format!("bind {bind}: {e}"))?;
     println!("RustGIS Preview listening on http://{bind}");
     if bind.starts_with("0.0.0.0") || bind.starts_with("[::]") {
@@ -357,6 +374,91 @@ fn api_response(app: &App, method: &Method, path: &str, query: &str, body: &[u8]
                 Err(e) => store_error_response(e),
             }
         }
+        (Method::Post, ["import", "qgis"]) => {
+            // The body is the raw .qgs/.qgz file; the filename arrives as a query parameter.
+            let file_name = query_value(query, "filename").unwrap_or_else(|| "project.qgs".into());
+            let plan = match crate::import::parse_project(body) {
+                Ok(plan) => plan,
+                Err(e) => return store_error_response(e),
+            };
+            let matches = {
+                let sources = app.sources.lock().unwrap_or_else(|e| e.into_inner());
+                let databases = app.databases.lock().unwrap_or_else(|e| e.into_inner());
+                let views = databases.views();
+                plan.layers.iter().map(|l| crate::import::match_layer(l, &sources, &views)).collect::<Vec<_>>()
+            };
+            let layers: Vec<serde_json::Value> = plan
+                .layers
+                .iter()
+                .zip(&matches)
+                .map(|(l, m)| {
+                    json!({
+                        "name": l.name,
+                        "kind": kind_label(l),
+                        "status": status_code(m),
+                        "detail": status_detail(m),
+                        "style": style_label(l),
+                        "visible": l.visible,
+                    })
+                })
+                .collect();
+            let title = plan.title.clone();
+            let token = crate::ids::new_id("imp");
+            {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+                let mut imports = app.imports.lock().unwrap_or_else(|e| e.into_inner());
+                imports.retain(|_, cached| now.saturating_sub(cached.created_at_ms) < 3_600_000);
+                imports.insert(token.clone(), CachedImport { file_name, plan, matches, created_at_ms: now });
+            }
+            json_response(200, json!({ "token": token, "title": title, "layers": layers }))
+        }
+        (Method::Post, ["import", "qgis", "create"]) => {
+            let request: ImportCreate = match parse_json(body) {
+                Ok(value) => value,
+                Err(response) => return response,
+            };
+            let cached = {
+                let mut imports = app.imports.lock().unwrap_or_else(|e| e.into_inner());
+                imports.remove(&request.token)
+            };
+            let Some(cached) = cached else {
+                return json_response(404, json!({"error": {"code": "import_not_found", "message": "导入会话不存在或已过期,请重新选择文件"}}));
+            };
+            let content = match crate::import::build_project(&cached.plan, &cached.matches) {
+                Ok(text) => text,
+                Err(e) => return store_error_response(e),
+            };
+            let mut store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
+            let description = Some(format!("从 QGIS 工程导入(源文件:{})", cached.file_name));
+            let created = match store.create_project(&request.name, description.as_deref(), Some(content)) {
+                Ok(created) => created,
+                Err(e) => return store_error_response(e),
+            };
+            let layers: Vec<ImportLayerMeta> = cached
+                .plan
+                .layers
+                .iter()
+                .zip(&cached.matches)
+                .map(|(l, m)| ImportLayerMeta {
+                    name: l.name.clone(),
+                    kind: kind_label(l),
+                    status: status_code(m),
+                    qgis_datasource: l.datasource.clone(),
+                    target: match m {
+                        MatchStatus::PairedFile { path } => Some(path.clone()),
+                        MatchStatus::CandidateDb { connection } => Some(connection.clone()),
+                        MatchStatus::Unpaired { .. } => None,
+                    },
+                    style_note: style_label(l),
+                })
+                .collect();
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+            let import_meta = ImportMeta { app: "qgis".into(), file_name: cached.file_name, imported_at_ms: now, layers };
+            match store.set_import_meta(&created.project.id, import_meta) {
+                Ok(_) => json_response(201, created),
+                Err(e) => store_error_response(e),
+            }
+        }
         (Method::Get, ["projects"]) => {
             let store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
             json_response(200, json!({"projects": store.projects()}))
@@ -386,6 +488,19 @@ fn api_response(app: &App, method: &Method, path: &str, query: &str, body: &[u8]
         (Method::Get, ["projects", project]) => {
             let store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
             match store.project(project) {
+                Ok(meta) => json_response(200, meta),
+                Err(e) => store_error_response(e),
+            }
+        }
+        (Method::Post, ["projects", project, "working", working, "pair"]) => {
+            let request: crate::pairing::PairRequest = match parse_json(body) {
+                Ok(value) => value,
+                Err(response) => return response,
+            };
+            let mut store = app.projects.lock().unwrap_or_else(|e| e.into_inner());
+            let sources = app.sources.lock().unwrap_or_else(|e| e.into_inner());
+            let databases = app.databases.lock().unwrap_or_else(|e| e.into_inner());
+            match crate::pairing::pair_layer(&mut store, &sources, &databases, project, working, &request) {
                 Ok(meta) => json_response(200, meta),
                 Err(e) => store_error_response(e),
             }
@@ -671,6 +786,12 @@ fn file_content_type(name: &str) -> &'static str {
 }
 
 #[derive(Deserialize)]
+struct ImportCreate {
+    token: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
 struct CreateProject {
     name: String,
     #[serde(default)]
@@ -751,6 +872,45 @@ struct PrepareContent {
 fn parse_json<T: for<'de> Deserialize<'de>>(body: &[u8]) -> Result<T, BytesResponse> {
     serde_json::from_slice(body)
         .map_err(|e| json_response(400, json!({"error": {"code": "invalid_json", "message": format!("invalid JSON request: {e}")}})))
+}
+
+// ---- QGIS import view helpers ---------------------------------------------
+
+fn kind_label(layer: &crate::import::ImportedLayer) -> String {
+    match &layer.source {
+        crate::import::ImportSource::File { .. } => "文件",
+        crate::import::ImportSource::Postgis { .. } => "数据库",
+        crate::import::ImportSource::Raster { .. } => "栅格",
+        crate::import::ImportSource::Web { .. } => "Web 服务",
+        crate::import::ImportSource::Unsupported { .. } => "其他",
+    }
+    .to_owned()
+}
+
+fn status_code(status: &MatchStatus) -> String {
+    match status {
+        MatchStatus::PairedFile { .. } => "paired",
+        MatchStatus::CandidateDb { .. } => "candidate",
+        MatchStatus::Unpaired { .. } => "unpaired",
+    }
+    .to_owned()
+}
+
+fn status_detail(status: &MatchStatus) -> String {
+    match status {
+        MatchStatus::PairedFile { path } => path.clone(),
+        MatchStatus::CandidateDb { connection } => format!("可配对连接:{connection}"),
+        MatchStatus::Unpaired { reason } => reason.clone(),
+    }
+}
+
+fn style_label(layer: &crate::import::ImportedLayer) -> String {
+    match layer.fidelity {
+        crate::import::StyleFidelity::Full => "完整",
+        crate::import::StyleFidelity::Approximate => "近似",
+        crate::import::StyleFidelity::Lost => "未移植",
+    }
+    .to_owned()
 }
 
 fn query_value(query: &str, key: &str) -> Option<String> {
@@ -940,7 +1100,7 @@ fn test_app(store: ProjectStore) -> Arc<App> {
     let home = store.home().clone();
     let sources = SourceRegistry::open(home.clone()).expect("source registry");
     let databases = DatabaseRegistry::open(home).expect("database registry");
-    Arc::new(App { projects: Mutex::new(store), sources: Mutex::new(sources), databases: Mutex::new(databases), web_dir: None })
+    Arc::new(App { projects: Mutex::new(store), sources: Mutex::new(sources), databases: Mutex::new(databases), imports: Mutex::new(std::collections::HashMap::new()), web_dir: None })
 }
 
 #[cfg(test)]
@@ -971,6 +1131,66 @@ mod tests {
         assert_eq!(body["projects"].as_array().map(Vec::len), Some(1));
         let read = api_response(app.as_ref(), &Method::Get, &format!("/api/projects/{project_id}/versions"), "", &[]);
         assert_eq!(read.status_code().0, 200);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn qgis_import_parses_and_creates_a_project_with_pairing_metadata() {
+        let (root, store) = temp_store("import");
+        let app = test_app(store);
+        let qgs = r#"<qgis projectname="导入测试">
+          <projectlayers>
+            <maplayer type="vector" visible="1"><id>a</id><layername>道路</layername><provider>ogr</provider>
+              <datasource>./missing_roads.shp</datasource></maplayer>
+            <maplayer type="vector" visible="1"><id>b</id><layername>监测点</layername><provider>postgres</provider>
+              <datasource>dbname='gis' host=127.0.0.1 port=55432 table="public"."points" (geom)</datasource></maplayer>
+          </projectlayers>
+        </qgis>"#;
+        let parsed = api_response(app.as_ref(), &Method::Post, "/api/import/qgis", "filename=demo.qgs", qgs.as_bytes());
+        assert_eq!(parsed.status_code().0, 200);
+        let (token, layers) = {
+            let body: serde_json::Value = serde_json::from_reader(parsed.into_reader()).expect("json");
+            (body["token"].as_str().expect("token").to_owned(), body["layers"].as_array().expect("layers").clone())
+        };
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0]["status"], "unpaired", "the missing file layer is deferred");
+        // No PostGIS connection is configured in this test, so the db layer is unpaired too.
+        assert_eq!(layers[1]["status"], "unpaired");
+
+        let created = api_response(
+            app.as_ref(),
+            &Method::Post,
+            "/api/import/qgis/create",
+            "",
+            format!("{{\"token\":\"{token}\",\"name\":\"导入工程\"}}").as_bytes(),
+        );
+        assert_eq!(created.status_code().0, 201);
+        let project_id = {
+            let body: serde_json::Value = serde_json::from_reader(created.into_reader()).expect("json");
+            body["project"]["id"].as_str().expect("id").to_owned()
+        };
+        let meta = api_response(app.as_ref(), &Method::Get, &format!("/api/projects/{project_id}"), "", &[]);
+        let body: serde_json::Value = serde_json::from_reader(meta.into_reader()).expect("json");
+        let import = body["import"].as_object().expect("import metadata");
+        assert_eq!(import["app"], "qgis");
+        assert_eq!(import["file_name"], "demo.qgs");
+        let layers = import["layers"].as_array().expect("layer metadata");
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0]["qgis_datasource"], "./missing_roads.shp");
+
+        // The project itself keeps both unpaired layers as streamed references.
+        let versions = api_response(app.as_ref(), &Method::Get, &format!("/api/projects/{project_id}/versions"), "", &[]);
+        assert_eq!(versions.status_code().0, 200);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn qgis_import_create_rejects_an_expired_token() {
+        let (root, store) = temp_store("import-token");
+        let app = test_app(store);
+        let created =
+            api_response(app.as_ref(), &Method::Post, "/api/import/qgis/create", "", br#"{"token":"imp_missing","name":"x"}"#);
+        assert_eq!(created.status_code().0, 404);
         std::fs::remove_dir_all(root).ok();
     }
 

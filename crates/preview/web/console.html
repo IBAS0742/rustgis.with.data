@@ -12,39 +12,106 @@ header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}.grow{flex
 .dot{width:8px;height:8px;border-radius:50%;background:#8fa3b1;display:inline-block;margin-right:6px}.dot.ok{background:#52c41a}.dot.bad{background:#ff7875}
 button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;padding:5px 9px;cursor:pointer}button:hover{border-color:#9fb1c0}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.primary:hover{background:var(--accent2)}button.danger{color:var(--danger);border-color:#e7c4c4}button:disabled{opacity:.5;cursor:not-allowed}
 input,select{font:inherit;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:#fff;color:var(--ink);min-width:0;width:100%}input:focus,select:focus{outline:2px solid #c8e2ee;border-color:var(--accent)}label{font-size:12px;color:var(--muted);display:block;margin:0 0 3px}
-.app{display:grid;grid-template-columns:360px minmax(0,1fr);height:calc(100% - 52px)}
-aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.app{display:grid;grid-template-columns:var(--sidebar-w,360px) minmax(0,1fr);height:100%}
+.app.no-sidebar aside{display:none}
+aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;position:relative}
+#sidebar-resize{position:absolute;top:0;right:-3px;bottom:0;width:7px;cursor:col-resize;z-index:3;background:transparent;touch-action:none}
+#sidebar-resize:hover,#sidebar-resize.dragging{background:var(--accent);opacity:.35}
 .tabs{display:flex;border-bottom:1px solid var(--line);padding:6px;gap:4px}.tabs button{flex:1;border:0;background:transparent;color:var(--muted);font-weight:600;padding:7px 4px}.tabs button.active{background:#e7f1f6;color:var(--accent2)}
 .panels{overflow:auto;padding:12px;flex:1}.panel{display:none}.panel.active{display:block}
 .card{border:1px solid var(--line);border-radius:8px;padding:9px;margin:0 0 9px;background:#fff}.card h3{font-size:13px;margin:0 0 4px;font-weight:650}.meta{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.row.end{justify-content:flex-end}.stack{display:grid;gap:6px}.form{border:1px solid var(--line);background:#f9fbfc;border-radius:8px;padding:9px;margin-bottom:12px}.form .row{gap:6px}.form input{flex:1}.badge{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:1px 7px;font-size:11px;color:var(--muted);background:#f7f9fa}.badge.ok{color:var(--ok);border-color:#b9dfcd;background:#f0faf5}.badge.bad{color:var(--danger);border-color:#ecc6c6;background:#fff5f5}.badge.warn{color:var(--warn);border-color:#ecd8a7;background:#fffaf0}
 .version{border-top:1px solid var(--line);padding:7px 0}.version:first-child{border-top:0}.version code{font-size:11px;color:var(--muted)}.muted{color:var(--muted)}.small{font-size:12px}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;overflow-wrap:anywhere}
-main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:#dfe6eb}.mapbar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#fff;border-bottom:1px solid var(--line);min-height:48px;flex-wrap:wrap}.mapbar .title{font-weight:650}.mapbar .muted{font-size:12px}
+main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:#dfe6eb}
+/* The app bar merges the old page header and the map toolbar into one dark strip: product
+   identity, service state, current document state and its actions, left to right. */
+.appbar{display:flex;align-items:center;gap:10px;padding:0 14px;background:#102a3a;color:#fff;min-height:50px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(16,42,58,.28);position:relative;z-index:2}
+.appbar .brand{font-size:14.5px;font-weight:650;letter-spacing:.4px;white-space:nowrap}
+.appbar .title{font-weight:600;font-size:13.5px;overflow-wrap:anywhere}
+.appbar .meta{color:#b9cbd8;font-size:12px}
+.appbar .vline{width:1px;height:20px;background:rgba(255,255,255,.25);flex:none}
+.appbar .health{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#b9cbd8;white-space:nowrap}
+.appbar button{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff}
+.appbar button:hover:not(:disabled){border-color:#fff;background:rgba(255,255,255,.12)}
+.appbar button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.appbar button.primary:hover:not(:disabled){background:var(--accent2)}
+.appbar button.ghost{border-color:transparent;padding:5px 8px}
+.appbar button.ghost:hover:not(:disabled){border-color:rgba(255,255,255,.35)}
+.appbar .badge{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#e6eef4}
+.appbar .badge.ok{background:rgba(82,196,26,.18);border-color:rgba(82,196,26,.5);color:#c9f2b0}
+.appbar .badge.warn{background:rgba(230,184,58,.16);border-color:rgba(230,184,58,.5);color:#f4dd9c}
 .mapwrap{position:relative;flex:1;min-height:0}.mapwrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#c9d6df}.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:30px;background:rgba(223,230,235,.94);text-align:center}.overlay .box{max-width:620px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px;box-shadow:var(--shadow);text-align:left}.overlay h2{margin:0 0 8px;font-size:17px}.overlay code{background:#eef2f5;padding:2px 5px;border-radius:4px}
 .availability{max-height:230px;overflow:auto;border-top:1px solid var(--line);background:#fff;padding:9px 12px}.availability h2{font-size:13px;margin:0 0 6px}.layerstatus{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding:5px 0;border-top:1px solid #edf1f4}.layerstatus:first-of-type{border-top:0}.layerstatus .reason{grid-column:1/-1;font-size:12px;color:var(--muted)}
 .table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{text-align:left;padding:5px 4px;border-top:1px solid #edf1f4;vertical-align:middle}.table th{font-size:11px;color:var(--muted);font-weight:600}.table td.name{overflow-wrap:anywhere}.table tr:first-child td{border-top:0}
 .breadcrumb{font-size:12px;margin:6px 0;display:flex;flex-wrap:wrap;gap:3px;align-items:center}.breadcrumb button{padding:1px 5px;font-size:12px}
 .tree{margin:6px 0}.schema{border-top:1px solid #edf1f4;padding:6px 0}.schema h4{margin:0 0 4px;font-size:12px}.rel{padding:3px 0 3px 8px}.rel .name{font-size:12px}.cols{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}.cols button{font-size:11px;padding:2px 6px}
-#toast{position:fixed;right:16px;bottom:16px;max-width:min(520px,calc(100% - 32px));background:#17202a;color:#fff;border-radius:8px;padding:10px 12px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.22);opacity:0;transform:translateY(10px);pointer-events:none;transition:.18s;z-index:10;white-space:pre-wrap}#toast.show{opacity:1;transform:none}#toast.error{background:#7a1f1f}
+#toast{position:fixed;right:16px;bottom:16px;max-width:min(520px,calc(100% - 32px));background:#17202a;color:#fff;border-radius:8px;padding:10px 12px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.22);opacity:0;transform:translateY(10px);pointer-events:none;transition:.18s;z-index:30;white-space:pre-wrap}#toast.show{opacity:1;transform:none}#toast.error{background:#7a1f1f}
 #build-note{display:none}
-.modal{position:fixed;inset:0;background:rgba(16,42,58,.45);display:flex;align-items:center;justify-content:center;z-index:20;padding:20px}.modal-box{background:#fff;border-radius:10px;box-shadow:var(--shadow);max-width:460px;width:100%;padding:16px}.modal-box h3{margin:0 0 10px;font-size:15px}.modal-box .field{margin:0 0 10px}.modal-box textarea{font:inherit;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:#fff;color:var(--ink);width:100%;min-height:64px;resize:vertical}.modal-box .row{margin-top:12px}
+.modal{position:fixed;inset:0;background:rgba(16,42,58,.45);display:flex;align-items:center;justify-content:center;z-index:20;padding:20px}.modal-box{background:#fff;border-radius:10px;box-shadow:var(--shadow);max-width:460px;width:100%;padding:16px}.modal-box.wide{max-width:760px}.modal-box h3{margin:0 0 10px;font-size:15px}.modal-box .field{margin:0 0 10px}.modal-box textarea{font:inherit;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:#fff;color:var(--ink);width:100%;min-height:64px;resize:vertical}.modal-box .row{margin-top:12px}
+.browse-head{border:1px solid var(--line);background:#f9fbfc;border-radius:8px;padding:8px 10px;margin:0 0 8px}
+.browse-head .row{margin:2px 0}
+.browse-table th{white-space:nowrap}.browse-table td{vertical-align:top}
+/* Floating, non-blocking window used by the source browser: draggable by its header,
+   resizable at the corner, single instance reused for the last-clicked resource. */
+#float-win{position:fixed;left:120px;top:90px;width:720px;height:520px;background:#fff;border:1.5px solid #a9c4d6;border-radius:10px;box-shadow:0 10px 36px rgba(16,42,58,.28);display:flex;flex-direction:column;z-index:25;min-width:420px;min-height:260px;max-width:calc(100vw - 24px);max-height:calc(100vh - 80px)}
+#float-win .fw-head{display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(180deg,#eaf3f8,#dfeaf2);border-bottom:1px solid #c8dae6;border-radius:10px 10px 0 0;cursor:move;user-select:none;touch-action:none}
+#float-win .fw-head strong{font-size:14px}
+#float-win .fw-body{flex:1;overflow:auto;padding:10px 12px;min-height:0}
+#float-win .fw-resize{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 46%,#a9c4d6 46%,#a9c4d6 58%,transparent 58%,transparent 70%,#a9c4d6 70%,#a9c4d6 82%,transparent 82%);border-radius:0 0 9px 0;touch-action:none}
+/* Three-pane cascading database browser: databases -> schemas -> tables. */
+.db-wrap{display:flex;flex-direction:column;height:100%;min-height:0}
+.db-note{font-size:12px;color:var(--muted);margin:0 0 8px;flex:none}
+.db-note button{font-size:12px;padding:2px 8px}
+.db3{flex:1;min-height:0;display:flex;align-items:stretch;overflow-x:auto;overflow-y:hidden}
+.db-pane{border:1px solid var(--line);border-radius:8px;overflow:auto;background:#fff;min-width:90px}
+.db-pane.p1{flex:1 1 auto;min-width:110px}
+.db-pane.p2,.db-pane.p3{flex:0 0 auto}
+.db-div{flex:0 0 7px;cursor:col-resize;border-radius:3px;touch-action:none}
+.db-div:hover,.db-div.dragging{background:var(--accent);opacity:.35}
+.db-pane h4{position:sticky;top:0;margin:0;padding:6px 9px;font-size:12px;background:#eef4f8;border-bottom:1px solid var(--line);color:var(--accent2);z-index:1}
+.db-item{display:flex;align-items:center;gap:6px;width:100%;text-align:left;border:0;border-bottom:1px solid #f0f4f7;background:#fff;padding:7px 9px;font-size:12.5px;cursor:pointer;overflow-wrap:anywhere}
+.db-item:hover{background:#f2f8fb}
+.db-item.sel{background:var(--accent);color:#fff}
+.db-empty{padding:10px;color:var(--muted);font-size:12px}
+.rel-cols{display:flex;flex-direction:column;gap:4px;margin:4px 0 8px 10px}
+.rel-cols button{font-size:12px;text-align:left}
+.rel-name{font-size:12.5px;font-weight:600;padding:6px 9px 2px;overflow-wrap:anywhere}
+.rel-name .badge{margin-left:4px}
+#float-win.min{height:auto}
+#float-win.min .fw-body,#float-win.min .fw-resize{display:none}
+.fw-btn{border:0;background:transparent;cursor:pointer;font-size:13px;padding:2px 7px;color:var(--accent2);line-height:1}
+.fw-btn:hover{background:#cfe2ec;border-radius:4px}
 .time{color:var(--ink);font-weight:600}
 .vtitle{font-size:12.5px}
 .card h3{font-size:14px}
 .proj-desc{margin:2px 0 4px;color:#3c4a58;font-size:12.5px;overflow-wrap:anywhere}
-@media(max-width:900px){.app{grid-template-columns:1fr;grid-template-rows:46% 54%}aside{order:2;border-right:0;border-top:1px solid var(--line)}main.map{order:1}.availability{max-height:150px}.panels{padding:9px}}
+/* Two-level project tree: level 1 is the project group, level 2 its versions/copies. */
+.project-card{border:1.5px solid #a9c4d6;border-radius:10px;margin:0 0 14px;padding:0;background:#fff;box-shadow:0 1px 4px rgba(20,40,60,.08);overflow:hidden}
+.pcard-head{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;background:linear-gradient(180deg,#eaf3f8,#dfeaf2);border-bottom:1px solid #c8dae6}
+.pcard-head h3{margin:0;font-size:15px;letter-spacing:.2px}
+.pcard-count{font-size:11px;color:var(--accent2);border:1px solid #b9d3e2;background:#fff;border-radius:99px;padding:1px 7px}
+.pcard-toggle{border:0;background:transparent;color:var(--accent2);font-size:11px;padding:4px 4px;cursor:pointer;line-height:1}
+.pcard-toggle:hover{background:#cfe2ec;border-radius:4px}
+.pcard-meta{margin-top:3px}
+.pcard-body{padding:2px 12px 10px 20px;margin:0 0 0 10px;border-left:2px solid #c9dbe7}
+.project-card.collapsed .pcard-body{display:none}
+.tree-item{display:flex;flex-wrap:wrap;gap:3px 10px;align-items:center;padding:7px 0;border-top:1px dashed #e4edf3}
+.tree-item:first-child{border-top:0}
+.ti-title{flex:1 1 100%;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.ti-title strong{font-size:13px;overflow-wrap:anywhere}
+.ti-time{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ti-actions{display:flex;gap:5px;margin-left:auto}
+.ti-actions button{font-size:12px;padding:3px 8px;white-space:nowrap}
+@media(max-width:900px){.app{grid-template-columns:1fr;grid-template-rows:46% 54%}aside{order:2;border-right:0;border-top:1px solid var(--line)}main.map{order:1}.availability{max-height:150px}.panels{padding:9px}#sidebar-resize{display:none}}
+/* Collapsed panel: the map is the only visible child, so it must fill a single track.
+   Kept after the media query so it also wins the narrow-layout row split. */
+.app.no-sidebar{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.app.no-sidebar main.map{grid-row:1;grid-column:1}
 </style>
 </head>
 <body>
-<header>
-  <h1>RustGIS 预览</h1>
-  <span class="meta" id="server-status"><span class="dot" id="health-dot"></span><span id="health-text">连接中…</span></span>
-  <span class="grow"></span>
-  <span class="meta" id="home-note">自托管 · 无账号体系 · 请保持在 localhost 或可信内网使用</span>
-  <button id="refresh-all" type="button">刷新</button>
-</header>
-
 <div class="app">
   <aside>
+    <div id="sidebar-resize" title="拖动调整面板宽度(280-450px)"></div>
     <div class="tabs" role="tablist">
       <button class="active" data-tab="projects" type="button">工程</button>
       <button data-tab="sources" type="button">数据源</button>
@@ -56,6 +123,10 @@ main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:
           <label for="new-project-name">新建工程</label>
           <div class="row"><input id="new-project-name" placeholder="工程名称"><button class="primary" id="create-project" type="button">新建工程</button></div>
           <p class="meta" style="margin:6px 0 0">也可以不新建,直接往地图加数据,之后点「保存为工程」;草稿关闭页面前会提醒保存。</p>
+        </div>
+        <div class="row" style="margin:0 0 10px">
+          <input type="file" id="import-qgis-file" accept=".qgs,.qgz" style="display:none">
+          <button id="import-qgis" type="button" title="支持 .qgs / .qgz,未配对图层可稍后连接数据">导入 QGIS 工程…</button>
         </div>
         <div id="project-list" class="small"></div>
         <div id="project-detail" style="display:none"></div>
@@ -69,31 +140,39 @@ main.map{display:flex;flex-direction:column;min-width:0;min-height:0;background:
           <p class="meta" style="margin:6px 0 0">浏览器不能提交任意路径;所有文件访问都被限制在这些根目录之内。</p>
         </div>
         <div id="source-list"></div>
-        <div id="source-browser" style="display:none"></div>
       </section>
 
       <section class="panel" id="panel-databases">
         <div class="form">
           <label>添加 PostgreSQL/PostGIS 连接</label>
           <div class="row"><input id="db-host" value="127.0.0.1" placeholder="主机" style="flex:2"><input id="db-port" value="5432" placeholder="端口" style="flex:1"></div>
-          <div class="row" style="margin-top:5px"><input id="db-user" placeholder="用户名" style="flex:1"><input id="db-password" type="password" autocomplete="off" placeholder="密码(仅存于内存)" style="flex:1"></div>
+          <div class="row" style="margin-top:5px"><input id="db-user" placeholder="用户名" style="flex:1"><input id="db-password" type="password" autocomplete="off" placeholder="密码(保存到服务端;留空则每次刷新后输入)" style="flex:1"></div>
           <div class="row" style="margin-top:5px"><input id="db-name" placeholder="默认数据库(可选)" style="flex:1"><select id="db-ssl" style="flex:1"><option value="prefer">prefer(默认)</option><option value="require">require</option><option value="disable">disable</option></select></div>
           <div class="row" style="margin-top:5px"><input id="db-label" placeholder="显示名称(可选)"><button class="primary" id="add-database" type="button">添加</button></div>
-          <p class="meta" style="margin:6px 0 0">密码仅保存在服务进程内存中。服务重启后配置保留,需重新输入密码;密码不会写入工程、URL 或日志。</p>
+          <p class="meta" style="margin:6px 0 0">保存时填写的密码会记录在服务端配置文件中,重启后无需再输;留空保存则每次刷新后需重新输入(输入时会先验证,错误可重试)。密码不会出现在工程、URL、日志或接口响应里。</p>
         </div>
         <div id="database-list"></div>
-        <div id="database-catalog" style="display:none"></div>
       </section>
     </div>
   </aside>
 
   <main class="map">
-    <div class="mapbar">
-      <span class="title" id="map-project">未打开工程</span>
+    <div class="mapbar appbar">
+      <button id="toggle-sidebar" class="ghost" type="button" title="收起/展开左侧面板">☰</button>
+      <span class="brand" title="自托管 · 无账号体系 · 请保持在 localhost 或可信内网使用">RustGIS 预览</span>
+      <span class="vline"></span>
+      <span id="server-status" class="health"><span class="dot" id="health-dot"></span><span id="health-text">连接中…</span></span>
+      <span class="vline"></span>
+      <button id="map-undo" class="ghost" type="button" title="撤销 (Ctrl+Z)">↶</button>
+      <button id="map-redo" class="ghost" type="button" title="重做 (Ctrl+Y)">↷</button>
+      <button id="map-search" class="ghost" type="button" title="命令搜索 (Ctrl+K)">⌕</button>
+      <span class="vline"></span>
+      <span class="title" id="map-project">未保存的草稿</span>
       <span class="badge" id="map-mode">空白地图</span>
       <span class="meta" id="map-dirty"></span>
       <span class="grow"></span>
-      <button id="copy-version" type="button" disabled>复制为工作副本</button>
+      <button id="refresh-all" class="ghost" type="button" title="刷新全部数据">↻ 刷新</button>
+      <button id="copy-version" class="ghost" type="button" disabled>复制为工作副本</button>
       <button class="primary" id="save-version" type="button" disabled>保存新版本</button>
       <button class="primary" id="save-scratch" type="button" style="display:none">保存为工程…</button>
     </div>
@@ -112,12 +191,22 @@ RUSTGIS_PREVIEW_WEB_DIR=apps/rustgis-web/dist cargo run -p rustgis-preview-serve
       </div>
     </div>
     <div class="availability" id="availability" style="display:none">
-      <div class="row"><h2 class="grow" style="margin:0">图层可用性</h2><button id="recheck" type="button">重新检查</button></div>
+      <div class="row"><h2 class="grow" style="margin:0">图层可用性</h2><button id="pair-layers" type="button" style="display:none">配对数据…</button><button id="recheck" type="button">重新检查</button></div>
       <div id="availability-list"></div>
     </div>
   </main>
 </div>
 <div id="toast" role="status"></div>
+<div id="float-win" style="display:none">
+  <div class="fw-head" id="fw-head">
+    <strong id="fw-title">浏览数据文件</strong>
+    <span class="grow"></span>
+    <button id="fw-min" class="fw-btn" type="button" title="最小化/恢复">─</button>
+    <button id="fw-close" class="fw-btn" type="button" title="关闭">✕</button>
+  </div>
+  <div class="fw-body" id="fw-body"></div>
+  <div class="fw-resize" id="fw-resize" title="拖动调整窗口大小"></div>
+</div>
 <div class="modal" id="modal" style="display:none">
   <div class="modal-box">
     <h3 id="modal-heading"></h3>

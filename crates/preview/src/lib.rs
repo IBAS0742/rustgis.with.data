@@ -11,6 +11,8 @@ pub mod availability;
 pub mod databases;
 pub mod error;
 pub mod home;
+pub mod import;
+pub mod pairing;
 pub mod ids;
 pub mod project_store;
 pub mod server;
