@@ -2,7 +2,9 @@
 
 ## Open the app
 
-- **In the browser**: open [web.rustgis.app](https://web.rustgis.app). Nothing to install.
+- **Self-hosted preview**: [run the preview server](preview/deploy.md) and open
+  <http://127.0.0.1:8765/>. It serves the browser map next to a console for data sources, projects
+  and immutable version history.
 - **On the desktop**: [install](installation.md) RustGIS and start it. It opens the World Atlas
   sample: countries, cities, rivers and lakes from Natural Earth.
 - **From source**:

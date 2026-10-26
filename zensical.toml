@@ -1,10 +1,9 @@
 [project]
 site_name = "RustGIS"
-site_description = "A fast, free and open-source GIS in pure Rust for mapping, analyzing and sharing geospatial data, on the desktop and in the browser"
+site_description = "A fast, free and open-source GIS in pure Rust for mapping, analyzing and sharing geospatial data, with a self-hosted preview server and immutable project versions"
 site_author = "opengeos"
-site_url = "https://rustgis.app"
-repo_url = "https://github.com/opengeos/RustGIS"
-repo_name = "opengeos/RustGIS"
+repo_url = "https://github.com/IBAS0742/rustgis.with.data"
+repo_name = "IBAS0742/rustgis.with.data"
 copyright = "Copyright &copy; 2026 Qiusheng Wu"
 extra_css = ["stylesheets/extra.css"]
 
@@ -12,7 +11,13 @@ nav = [
   { "Home" = "index.md" },
   { "Installation" = "installation.md" },
   { "Getting Started" = "getting-started.md" },
-  { "Web App" = "https://web.rustgis.app" },
+  { "Preview Server" = [
+    "preview/index.md",
+    "preview/deploy.md",
+    "preview/projects.md",
+    "preview/sources.md",
+    "preview/api.md",
+  ] },
   { "User Guide" = [
     "user-guide/index.md",
     "user-guide/data.md",
@@ -40,9 +45,8 @@ nav = [
   { "Architecture" = "architecture.md" },
   { "Contributing" = "contributing.md" },
   { "Acknowledgements" = "acknowledgements.md" },
-  { "Sponsor" = "sponsor.md" },
   { "Privacy" = "privacy.md" },
-  { "Report Issues" = "https://github.com/opengeos/RustGIS/issues" },
+  { "Report Issues" = "https://github.com/IBAS0742/rustgis.with.data/issues" },
 ]
 
 [project.theme]
@@ -92,15 +96,5 @@ permalink = true
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
-link = "https://github.com/opengeos/RustGIS"
-name = "RustGIS on GitHub"
-
-[[project.extra.social]]
-icon = "fontawesome/solid/heart"
-link = "https://github.com/sponsors/giswqs"
-name = "Sponsor RustGIS on GitHub"
-
-[[project.extra.social]]
-icon = "fontawesome/solid/mug-hot"
-link = "https://buymeacoffee.com/giswqs"
-name = "Buy the maintainer a coffee"
+link = "https://github.com/IBAS0742/rustgis.with.data"
+name = "This repository on GitHub"

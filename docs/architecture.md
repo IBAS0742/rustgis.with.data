@@ -15,7 +15,8 @@ engine scriptable and the front end swappable.
 | L4 | `rustgis-engine` | Session, undo, command registry, sample project |
 | L5 | `rustgis-assistant` | The [AI Assistant](user-guide/assistant.md): a chat agent that acts through commands; OpenAI-compatible, OpenAI Responses (a ChatGPT plan's sign-in), Anthropic and Gemini wire formats as plain request/response data, so the desktop (a thread), the browser (`fetch`) and the command line share one loop |
 | L6 | `rustgis-ui-egui` | The ribbon front end |
-| apps | `rustgis`, `rustgis-cli`, `rustgis-web` | Desktop app, command line, browser (WebAssembly) |
+| app | `rustgis-preview` (`crates/preview`) | The [self-hosted preview server](preview/index.md): HTTP console and API, source-root registry with controlled file reads, non-secret PostGIS connection settings, and the project store with immutable versions and working copies on top of the `.rgis` format; serves `apps/rustgis-web`'s build and embeds it over `postMessage` |
+| apps | `rustgis`, `rustgis-cli`, `rustgis-web`, `rustgis-preview` | Desktop app, command line, browser (WebAssembly), preview server binary |
 
 ## Everything is a command
 

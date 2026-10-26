@@ -1,30 +1,38 @@
 # RustGIS
 
 **A fast, free and open-source GIS in pure Rust for mapping, analyzing and sharing geospatial
-data.**
+data — running natively, in the browser, and self-hosted.**
 
-RustGIS runs natively on Windows, macOS and Linux, and in your web browser. Your data stays on
-your machine unless you send it to an AI model you choose, and every action is a command you can
-script from the command line, a notebook or the AI Assistant.
+This repository pairs the RustGIS engine with a small, self-hosted **preview server**: run it
+locally or in Docker, browse your GIS data through controlled source roots, and edit projects with
+immutable version history. Your data stays on your machine unless you send it to an AI model you
+choose, and every action is a command you can script from the command line, a notebook or the AI
+Assistant.
 
 <div class="hero-actions" markdown>
 
-[Try it in your browser](https://web.rustgis.app){ .md-button .md-button--primary }
-[Download](installation.md){ .md-button }
+[Run the preview server](preview/index.md){ .md-button .md-button--primary }
 [Get started](getting-started.md){ .md-button }
+[User Guide](user-guide/index.md){ .md-button }
 [Compare](comparison/index.md){ .md-button }
-[![Get it from Microsoft](https://get.microsoft.com/images/en-us%20dark.svg)](https://apps.microsoft.com/detail/9ppjw8h561lq?mode=direct)
 
 </div>
 
 <figure markdown="span">
-  [![RustGIS with the Home tab of the ribbon open over a world map in the Equal Earth projection, countries shaded by population](https://assets.rustgis.app/images/hero.webp)](https://assets.rustgis.app/images/hero.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
-  <figcaption>RustGIS with the World Atlas sample in the Equal Earth projection.</figcaption>
+  [![The RustGIS web map served by the self-hosted preview server: the World Atlas sample with the layers pane](preview/images/map-app.png)](preview/images/map-app.png){ target="_blank" rel="noopener" title="Open the full-size image" }
+  <figcaption>The RustGIS browser map (WebAssembly), served by the self-hosted preview server.</figcaption>
 </figure>
 
 ## Highlights
 
 <div class="grid cards" markdown>
+
+-   **Self-hosted preview server**
+
+    One binary plus Docker: controlled source roots, bounded file reads, persistent PostGIS
+    connections (passwords never on disk), and `.rgis` projects with immutable versions and
+    working copies.
+    [Preview Server](preview/index.md) · [Deploy](preview/deploy.md) · [HTTP API](preview/api.md)
 
 -   **Your data, any source**
 
@@ -69,6 +77,16 @@ script from the command line, a notebook or the AI Assistant.
 <div class="grid" markdown>
 
 <figure markdown="span">
+  [![The preview console: a configured source root and the floating file browser with its paginated listing and add-layer buttons, over the running map](preview/images/sources-browse.png)](preview/images/sources-browse.png){ target="_blank" rel="noopener" title="Open the full-size image" }
+  <figcaption><strong>Data sources.</strong> Server-side folders browsed in a floating window; adding a layer never modifies source data.</figcaption>
+</figure>
+
+<figure markdown="span">
+  [![The projects tree: a project with its published versions, a working copy and the layer availability panel](preview/images/project-versions.png)](preview/images/project-versions.png){ target="_blank" rel="noopener" title="Open the full-size image" }
+  <figcaption><strong>Immutable versions.</strong> Saved versions are read-only; editing happens in working copies and saving publishes a new version.</figcaption>
+</figure>
+
+<figure markdown="span">
   [![The Style tab and the Symbology pane, with the larger African countries selected](https://assets.rustgis.app/images/symbology-table.webp)](https://assets.rustgis.app/images/symbology-table.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
   <figcaption><strong>Symbology and tables.</strong> Graduated colours, with the selection synced to the table.</figcaption>
 </figure>
@@ -104,16 +122,6 @@ script from the command line, a notebook or the AI Assistant.
 </figure>
 
 <figure markdown="span">
-  [![Mars on the 3D globe, on the Viking mosaic](https://assets.rustgis.app/images/mars-globe.webp)](https://assets.rustgis.app/images/mars-globe.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
-  <figcaption><strong>Other worlds.</strong> The Moon, Mars and nine more bodies, on their own basemaps.</figcaption>
-</figure>
-
-<figure markdown="span">
-  [![Countries extruded by population on a tilted map](https://assets.rustgis.app/images/extrusion.webp)](https://assets.rustgis.app/images/extrusion.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
-  <figcaption><strong>Extrusion.</strong> Stand features up by a field, lit and shaded.</figcaption>
-</figure>
-
-<figure markdown="span">
   [![An OpenFreeMap vector style over Paris with the Basemap gallery](https://assets.rustgis.app/images/tiles.webp)](https://assets.rustgis.app/images/tiles.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
   <figcaption><strong>Web basemaps.</strong> XYZ, WMS and vector tiles, and MapLibre styles.</figcaption>
 </figure>
@@ -124,28 +132,13 @@ script from the command line, a notebook or the AI Assistant.
 </figure>
 
 <figure markdown="span">
-  [![The Time Slider showing dated events through 2018](https://assets.rustgis.app/images/time-slider.webp)](https://assets.rustgis.app/images/time-slider.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
-  <figcaption><strong>Time Slider.</strong> Step dated features and imagery through time.</figcaption>
-</figure>
-
-<figure markdown="span">
   [![A page layout with a map frame, legend, north arrow and scale bar](https://assets.rustgis.app/images/layout.webp)](https://assets.rustgis.app/images/layout.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
   <figcaption><strong>Layouts.</strong> Map frames, legends, scale bars, map series and PDF export.</figcaption>
 </figure>
 
 <figure markdown="span">
-  [![The Plugin Manager browsing the plugin registry](https://assets.rustgis.app/images/plugins.webp)](https://assets.rustgis.app/images/plugins.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
-  <figcaption><strong>Plugins.</strong> Install sandboxed plugins from <a href="https://plugins.rustgis.app">plugins.rustgis.app</a>.</figcaption>
-</figure>
-
-<figure markdown="span">
   [![Dark mode over Europe on the Midnight basemap](https://assets.rustgis.app/images/dark.webp)](https://assets.rustgis.app/images/dark.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
   <figcaption><strong>Dark mode</strong> and the View tab's effects, panes and linked views.</figcaption>
-</figure>
-
-<figure markdown="span">
-  [![The Project backstage](https://assets.rustgis.app/images/backstage.webp)](https://assets.rustgis.app/images/backstage.webp){ target="_blank" rel="noopener" title="Open the full-size image" }
-  <figcaption><strong>Projects.</strong> Start blank, from the World Atlas sample, or open a project.</figcaption>
 </figure>
 
 </div>

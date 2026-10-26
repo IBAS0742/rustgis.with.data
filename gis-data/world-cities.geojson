@@ -1,0 +1,21 @@
+{
+"type": "FeatureCollection",
+"name": "world-cities",
+"features": [
+{"type":"Feature","properties":{"name":"Beijing","country":"China","population":21893095},"geometry":{"type":"Point","coordinates":[116.4074,39.9042]}},
+{"type":"Feature","properties":{"name":"Tokyo","country":"Japan","population":13960000},"geometry":{"type":"Point","coordinates":[139.6917,35.6895]}},
+{"type":"Feature","properties":{"name":"Shanghai","country":"China","population":24870895},"geometry":{"type":"Point","coordinates":[121.4737,31.2304]}},
+{"type":"Feature","properties":{"name":"Singapore","country":"Singapore","population":5685807},"geometry":{"type":"Point","coordinates":[103.8198,1.3521]}},
+{"type":"Feature","properties":{"name":"Mumbai","country":"India","population":12442373},"geometry":{"type":"Point","coordinates":[72.8777,19.076]}},
+{"type":"Feature","properties":{"name":"Delhi","country":"India","population":16787941},"geometry":{"type":"Point","coordinates":[77.209,28.6139]}},
+{"type":"Feature","properties":{"name":"Cairo","country":"Egypt","population":9500000},"geometry":{"type":"Point","coordinates":[31.2357,30.0444]}},
+{"type":"Feature","properties":{"name":"Istanbul","country":"Turkey","population":15462452},"geometry":{"type":"Point","coordinates":[28.9795,41.0082]}},
+{"type":"Feature","properties":{"name":"Moscow","country":"Russia","population":12506468},"geometry":{"type":"Point","coordinates":[37.6173,55.7558]}},
+{"type":"Feature","properties":{"name":"London","country":"United Kingdom","population":8981983},"geometry":{"type":"Point","coordinates":[-0.1276,51.5072]}},
+{"type":"Feature","properties":{"name":"Paris","country":"France","population":2148271},"geometry":{"type":"Point","coordinates":[2.3522,48.8566]}},
+{"type":"Feature","properties":{"name":"Berlin","country":"Germany","population":3664088},"geometry":{"type":"Point","coordinates":[13.405,52.52]}},
+{"type":"Feature","properties":{"name":"New York","country":"United States","population":8336817},"geometry":{"type":"Point","coordinates":[-74.006,40.7128]}},
+{"type":"Feature","properties":{"name":"Sao Paulo","country":"Brazil","population":12325232},"geometry":{"type":"Point","coordinates":[-46.6333,-23.5505]}},
+{"type":"Feature","properties":{"name":"Sydney","country":"Australia","population":5312163},"geometry":{"type":"Point","coordinates":[151.2093,-33.8688]}}
+]
+}
