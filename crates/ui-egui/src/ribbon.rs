@@ -185,16 +185,19 @@ fn tool_indicator(app: &RustGisApp, ui: &Ui) -> Option<(String, f32)> {
 fn tab_strip(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-        // The Project button opens the backstage.
-        let pw = text_w(ui, tl!("Project"), semibold(12.5)) + 26.0;
-        let (pr, presp) = ui.allocate_exact_size(vec2(pw, 26.0), Sense::click());
-        let fill = if presp.hovered() { crate::theme::BRAND_DARK } else { crate::theme::BRAND };
-        ui.painter().rect_filled(pr, CornerRadius::same(6), fill);
-        ui.painter().text(pr.center(), Align2::CENTER_CENTER, tl!("Project"), semibold(12.5), egui::Color32::WHITE);
-        if presp.on_hover_text(tl!("Open, save and create projects")).clicked() {
-            app.ui.backstage = true;
+        // The Project button opens the backstage. Embedded, the page that embeds this app owns
+        // project open/save, so the button (and the backstage it opens) stay out of sight.
+        if !app.ui.embedded {
+            let pw = text_w(ui, tl!("Project"), semibold(12.5)) + 26.0;
+            let (pr, presp) = ui.allocate_exact_size(vec2(pw, 26.0), Sense::click());
+            let fill = if presp.hovered() { crate::theme::BRAND_DARK } else { crate::theme::BRAND };
+            ui.painter().rect_filled(pr, CornerRadius::same(6), fill);
+            ui.painter().text(pr.center(), Align2::CENTER_CENTER, tl!("Project"), semibold(12.5), egui::Color32::WHITE);
+            if presp.on_hover_text(tl!("Open, save and create projects")).clicked() {
+                app.ui.backstage = true;
+            }
+            ui.add_space(6.0);
         }
-        ui.add_space(6.0);
         // RustGIS's tabs, then plugins' own tabs; the user can hide any of them.
         let mut tabs: Vec<(String, String)> = TABS.iter().map(|t| (t.to_string(), tl!(*t).to_string())).collect();
         tabs.extend(plugin_tabs(app));
@@ -323,8 +326,11 @@ fn clipboard_group(app: &mut RustGisApp, ui: &mut Ui) {
 }
 
 fn home_tab(app: &mut RustGisApp, ui: &mut Ui) {
-    // New maps and layouts and the project's items first: where work starts (#328).
-    project_group(app, ui);
+    // New maps and layouts and the project's items first: where work starts (#328). Embedded,
+    // the embedding page owns projects, so its own actions are not offered here.
+    if !app.ui.embedded {
+        project_group(app, ui);
+    }
     group(ui, "Navigate", |ui| {
         tool_btn(
             ui,

@@ -78,7 +78,21 @@ pub fn header_layout(titlebar: Option<TitlebarMetrics>) -> HeaderLayout {
     }
 }
 
+/// Quick-access commands the embedding page owns, so embedded the header leaves them out.
+fn owned_by_embedding_page(id: &str) -> bool {
+    id.starts_with("project.") || matches!(id, "ui.open" | "ui.save" | "ui.saveAs")
+}
+
+/// Whether the header would draw anything. The desktop always shows it; embedded, it is only
+/// kept for user-added quick actions that the embedding page does not already offer.
+fn header_has_content(embedded: bool, quick_access: &[String]) -> bool {
+    !embedded || quick_access.iter().any(|id| !owned_by_embedding_page(id))
+}
+
 pub fn header(app: &mut RustGisApp, ui: &mut Ui) {
+    if !header_has_content(app.ui.embedded, &app.ui.quick_access) {
+        return;
+    }
     let t = Tokens::get(ui.ctx());
     let layout = header_layout(app.ui.titlebar);
     egui::Panel::top("header")
@@ -112,108 +126,138 @@ pub fn header(app: &mut RustGisApp, ui: &mut Ui) {
             }
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                let (r, _) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::hover());
-                app.paint_logo(ui, r);
-                ui.add_space(6.0);
-                ui.label(egui::RichText::new(tl!("RustGIS")).font(semibold(13.0)).color(t.text));
-                ui.add_space(10.0);
-                // Quick Access Toolbar.
-                small(ui, app, "new", "", "New project", "project.new", Value::Null, false);
-                small(ui, app, "open", "", "Open project", "ui.open", Value::Null, false);
-                small(ui, app, "save", "", "Save project", "ui.save", Value::Null, false);
-                small(
-                    ui,
-                    app,
-                    "undo",
-                    "",
-                    app.session
-                        .undo_label()
-                        .map(|l| crate::i18n::fmt("Undo {action}", &[("action", tl_raw!(l))]))
-                        .unwrap_or(tl!("Undo").into())
-                        .as_str(),
-                    "edit.undo",
-                    Value::Null,
-                    false,
-                );
-                small(
-                    ui,
-                    app,
-                    "redo",
-                    "",
-                    app.session
-                        .redo_label()
-                        .map(|l| crate::i18n::fmt("Redo {action}", &[("action", tl_raw!(l))]))
-                        .unwrap_or(tl!("Redo").into())
-                        .as_str(),
-                    "edit.redo",
-                    Value::Null,
-                    false,
-                );
+                // Embedded, the page that embeds the app owns the project (logo and identity
+                // included): the header starts directly with the editing tools.
+                if !app.ui.embedded {
+                    let (r, _) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::hover());
+                    app.paint_logo(ui, r);
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new(tl!("RustGIS")).font(semibold(13.0)).color(t.text));
+                    ui.add_space(10.0);
+                }
+                // Quick Access Toolbar. Embedded, its project actions are not offered.
+                if !app.ui.embedded {
+                    small(ui, app, "new", "", "New project", "project.new", Value::Null, false);
+                    small(ui, app, "open", "", "Open project", "ui.open", Value::Null, false);
+                    small(ui, app, "save", "", "Save project", "ui.save", Value::Null, false);
+                }
+                // Undo/redo and the command search move to the embedding page's own app bar
+                // when embedded; the header keeps them only for the desktop app.
+                if !app.ui.embedded {
+                    small(
+                        ui,
+                        app,
+                        "undo",
+                        "",
+                        app.session
+                            .undo_label()
+                            .map(|l| crate::i18n::fmt("Undo {action}", &[("action", tl_raw!(l))]))
+                            .unwrap_or(tl!("Undo").into())
+                            .as_str(),
+                        "edit.undo",
+                        Value::Null,
+                        false,
+                    );
+                    small(
+                        ui,
+                        app,
+                        "redo",
+                        "",
+                        app.session
+                            .redo_label()
+                            .map(|l| crate::i18n::fmt("Redo {action}", &[("action", tl_raw!(l))]))
+                            .unwrap_or(tl!("Redo").into())
+                            .as_str(),
+                        "edit.redo",
+                        Value::Null,
+                        false,
+                    );
+                }
                 for id in app.ui.quick_access.clone() {
+                    // A user-added quick action that is really a project command stays hidden
+                    // when embedded, like the fixed ones above.
+                    if app.ui.embedded && owned_by_embedding_page(&id) {
+                        continue;
+                    }
                     let label = crate::ribbon::QUICK.iter().find(|q| q.0 == id).map_or(id.as_str(), |q| q.1).to_string();
                     small(ui, app, crate::ribbon::quick_icon(&id), "", &label, &id, Value::Null, false);
                 }
                 // Everything right of the Quick Access Toolbar is laid out by measuring, so on a
                 // narrow window the search box shrinks to an icon and the title shortens or hides
-                // instead of overlapping other controls.
-                let qat_end = ui.cursor().min.x + 8.0;
-                // Command search on the right: full width when there is room, a round icon button
-                // otherwise. It never reaches into the toolbar.
-                let label = tl!("Command Search");
-                let hint = if cfg!(target_os = "macos") { "⌘K" } else { "Ctrl+K" };
-                let right = full.max.x;
-                let room = right - qat_end;
-                let full_w = (text_w(ui, label, regular(12.0)) + text_w(ui, hint, regular(11.0)) + 70.0).clamp(200.0, 260.0);
-                // Room kept for the title next to the search box.
-                let reserve = (text_w(ui, &app.session.project.name, semibold(12.5)) + 16.0).min(160.0);
-                let sw = if room >= full_w + reserve + 24.0 {
-                    full_w
-                } else if room >= 150.0 + reserve {
-                    (room - reserve).clamp(150.0, full_w)
-                } else {
-                    26.0
-                };
-                let sr = Rect::from_min_max(pos2(right - sw, full.center().y - 12.0), pos2(right, full.center().y + 12.0));
-                let resp = ui.interact(sr, egui::Id::new("command_search_box"), Sense::click());
-                ui.painter().rect_filled(sr, CornerRadius::same(12), if resp.hovered() { t.hover } else { t.input });
-                ui.painter().rect_stroke(sr, CornerRadius::same(12), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-                let compact = sw < 100.0;
-                let icon_x = if compact { sr.center().x } else { sr.min.x + 16.0 };
-                icons::paint(
-                    ui.painter(),
-                    Rect::from_center_size(pos2(icon_x, sr.center().y), vec2(14.0, 14.0)),
-                    "search",
-                    t.text_dim,
-                    t.accent,
-                );
-                if !compact {
-                    let show_hint = sw >= full_w - 1.0;
-                    let text_room = sr.width() - 40.0 - if show_hint { text_w(ui, hint, regular(11.0)) + 12.0 } else { 0.0 };
-                    if text_w(ui, label, regular(12.0)) <= text_room {
-                        ui.painter().text(pos2(sr.min.x + 30.0, sr.center().y), Align2::LEFT_CENTER, label, regular(12.0), t.text_dim);
+                // instead of overlapping other controls. Embedded, the command search (like
+                // undo/redo) is offered by the embedding page's app bar instead.
+                if !app.ui.embedded {
+                    let qat_end = ui.cursor().min.x + 8.0;
+                    // Command search on the right: full width when there is room, a round icon button
+                    // otherwise. It never reaches into the toolbar.
+                    let label = tl!("Command Search");
+                    let hint = if cfg!(target_os = "macos") { "⌘K" } else { "Ctrl+K" };
+                    let right = full.max.x;
+                    let room = right - qat_end;
+                    let full_w = (text_w(ui, label, regular(12.0)) + text_w(ui, hint, regular(11.0)) + 70.0).clamp(200.0, 260.0);
+                    // Room kept for the title next to the search box.
+                    let reserve = (text_w(ui, &app.session.project.name, semibold(12.5)) + 16.0).min(160.0);
+                    let sw = if room >= full_w + reserve + 24.0 {
+                        full_w
+                    } else if room >= 150.0 + reserve {
+                        (room - reserve).clamp(150.0, full_w)
+                    } else {
+                        26.0
+                    };
+                    let sr = Rect::from_min_max(pos2(right - sw, full.center().y - 12.0), pos2(right, full.center().y + 12.0));
+                    let resp = ui.interact(sr, egui::Id::new("command_search_box"), Sense::click());
+                    ui.painter().rect_filled(sr, CornerRadius::same(12), if resp.hovered() { t.hover } else { t.input });
+                    ui.painter().rect_stroke(sr, CornerRadius::same(12), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+                    let compact = sw < 100.0;
+                    let icon_x = if compact { sr.center().x } else { sr.min.x + 16.0 };
+                    icons::paint(
+                        ui.painter(),
+                        Rect::from_center_size(pos2(icon_x, sr.center().y), vec2(14.0, 14.0)),
+                        "search",
+                        t.text_dim,
+                        t.accent,
+                    );
+                    if !compact {
+                        let show_hint = sw >= full_w - 1.0;
+                        let text_room = sr.width() - 40.0 - if show_hint { text_w(ui, hint, regular(11.0)) + 12.0 } else { 0.0 };
+                        if text_w(ui, label, regular(12.0)) <= text_room {
+                            ui.painter().text(pos2(sr.min.x + 30.0, sr.center().y), Align2::LEFT_CENTER, label, regular(12.0), t.text_dim);
+                        }
+                        if show_hint {
+                            ui.painter().text(
+                                pos2(sr.max.x - 12.0, sr.center().y),
+                                Align2::RIGHT_CENTER,
+                                hint,
+                                regular(11.0),
+                                t.text_disabled,
+                            );
+                        }
                     }
-                    if show_hint {
-                        ui.painter().text(pos2(sr.max.x - 12.0, sr.center().y), Align2::RIGHT_CENTER, hint, regular(11.0), t.text_disabled);
+                    let resp = if compact { resp.on_hover_text(format!("{label} ({hint})")) } else { resp };
+                    if resp.clicked() {
+                        app.ui.command_search = Some(String::new());
                     }
-                }
-                let resp = if compact { resp.on_hover_text(format!("{label} ({hint})")) } else { resp };
-                if resp.clicked() {
-                    app.ui.command_search = Some(String::new());
-                }
-                // Title: centred when it fits, otherwise in the free gap; the map name and then the
-                // project name drop out when there is no room.
-                let title = format!("{}{}", app.session.project.name, if app.session.dirty { " •" } else { "" });
-                let sub = format!("  —  {}", app.session.map().name);
-                let (title_w, sub_w) = (text_w(ui, &title, semibold(12.5)), text_w(ui, &sub, regular(12.0)));
-                let (a, b) = (qat_end + 8.0, sr.min.x - 16.0);
-                if b > a {
-                    let with_sub = title_w + sub_w <= b - a;
-                    let tw = if with_sub { title_w + sub_w } else { title_w };
-                    if tw <= b - a {
-                        let cx = (full.center().x - tw / 2.0).min(b - tw).max(a);
-                        ui.painter().text(pos2(cx, full.center().y), Align2::LEFT_CENTER, &title, semibold(12.5), t.text);
-                        if with_sub {
-                            ui.painter().text(pos2(cx + title_w, full.center().y), Align2::LEFT_CENTER, &sub, regular(12.0), t.text_dim);
+                    // Title: centred when it fits, otherwise in the free gap; the map name and then the
+                    // project name drop out when there is no room.
+                    let title = format!("{}{}", app.session.project.name, if app.session.dirty { " •" } else { "" });
+                    let sub = format!("  —  {}", app.session.map().name);
+                    let (title_w, sub_w) = (text_w(ui, &title, semibold(12.5)), text_w(ui, &sub, regular(12.0)));
+                    let (a, b) = (qat_end + 8.0, sr.min.x - 16.0);
+                    if b > a {
+                        let with_sub = title_w + sub_w <= b - a;
+                        let tw = if with_sub { title_w + sub_w } else { title_w };
+                        if tw <= b - a {
+                            let cx = (full.center().x - tw / 2.0).min(b - tw).max(a);
+                            ui.painter().text(pos2(cx, full.center().y), Align2::LEFT_CENTER, &title, semibold(12.5), t.text);
+                            if with_sub {
+                                ui.painter().text(
+                                    pos2(cx + title_w, full.center().y),
+                                    Align2::LEFT_CENTER,
+                                    &sub,
+                                    regular(12.0),
+                                    t.text_dim,
+                                );
+                            }
                         }
                     }
                 }
@@ -1177,6 +1221,17 @@ mod tests {
         ] {
             assert_eq!(parse_scale(text), None, "{text}");
         }
+    }
+
+    #[test]
+    fn embedded_header_is_hidden_unless_a_quick_action_needs_it() {
+        let none: Vec<String> = Vec::new();
+        assert!(header_has_content(false, &none), "the desktop always has a header");
+        assert!(!header_has_content(true, &none), "embedded and empty: no blank strip");
+        assert!(!header_has_content(true, &["ui.open".into()]), "the embedding page owns Open");
+        assert!(!header_has_content(true, &["project.new".into(), "ui.saveAs".into()]), "project commands are hidden when embedded");
+        assert!(header_has_content(true, &["edit.undo".into()]), "user quick actions still show");
+        assert!(header_has_content(true, &["ui.save".into(), "map.zoomIn".into()]), "one visible action is enough");
     }
 
     #[test]

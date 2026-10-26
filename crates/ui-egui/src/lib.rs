@@ -420,6 +420,10 @@ pub enum RightPane {
 }
 
 pub struct UiState {
+    /// Inside another page (`?embed`): the embedding page owns project open/save, so the
+    /// interface hides its own project actions (the Project button and the Home tab's project
+    /// group). Never set in the desktop app.
+    pub embedded: bool,
     pub tab: String,
     pub backstage: bool,
     pub backstage_page: &'static str,
@@ -604,6 +608,7 @@ impl UiState {
 impl Default for UiState {
     fn default() -> Self {
         UiState {
+            embedded: false,
             tab: "Home".into(),
             backstage: false,
             backstage_page: "open",

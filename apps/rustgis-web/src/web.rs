@@ -128,6 +128,9 @@ pub fn start() {
                         cc.egui_ctx.clone(),
                         embedded,
                     ));
+                    // Embedded, the embedding page owns project open/save: the interface hides
+                    // its own project actions (Project button, Home tab's project group).
+                    app.ui.embedded = embedded;
                     // Settings › Start-up, unless `?blank`, `?projection=EPSG:3010` (a preset id,
                     // `mercator`, `globe`) or `?extent=minLon,minLat,maxLon,maxLat` says otherwise
                     // for this visit.

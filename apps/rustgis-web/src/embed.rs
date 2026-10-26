@@ -51,9 +51,11 @@ pub fn parse(v: &Value) -> Option<Msg> {
     }
 }
 
-/// Whether the embedding page may run `command`: the interface's own commands only.
+/// Whether the embedding page may run `command`: the interface's own commands, plus the two
+/// undo steps — the page owns the project (open/save) but the edit history belongs to the
+/// interface, and its commands touch no files.
 pub fn runnable(command: &str) -> bool {
-    command.strip_prefix("ui.").is_some_and(|rest| !rest.is_empty())
+    command.strip_prefix("ui.").is_some_and(|rest| !rest.is_empty()) || matches!(command, "edit.undo" | "edit.redo")
 }
 
 pub fn ready() -> Value {
@@ -150,7 +152,9 @@ mod tests {
     #[test]
     fn the_page_runs_only_interface_commands() {
         assert!(runnable("ui.language"));
-        for other in ["ui.", "layer.addData", "project.open", "share.exportMap", "gp.run", "uix.language", ""] {
+        assert!(runnable("edit.undo"), "the embedding page offers undo in its own app bar");
+        assert!(runnable("edit.redo"));
+        for other in ["ui.", "layer.addData", "project.open", "project.save", "share.exportMap", "gp.run", "uix.language", "edit.undoDeep"] {
             assert!(!runnable(other), "{other}");
         }
     }
