@@ -162,3 +162,11 @@
 ## 2026-10-25 撤销/重做与命令搜索移入应用栏
 
 嵌入协议(`embed.rs runnable`)在 `ui.*` 之外放行 `edit.undo`/`edit.redo`(纯编辑历史操作,无文件 IO;测试更新覆盖)。控制台深色应用栏在品牌与服务状态之后新增 ↶(撤销)/↷(重做)/⌕(命令搜索)三个按钮,经 postMessage 调用地图;嵌入模式下地图浅色头部不再绘制撤销/重做按钮、命令搜索框与窗口标题(桌面应用不变)。浏览器实测:应用栏 ⌕ 成功弹出地图的 Command Search 面板(含输入框与命令列表),浅色头部直接从标签栏开始;`cargo test -p rustgis-web` 3 项通过。
+
+## 2026-10-26 嵌入地图头部空白行移除
+
+嵌入模式(`?embed`)下 `crates/ui-egui/src/chrome.rs` 的 `header()` 仍会创建一个 34px 高的顶部 Panel,但徽标、工程三按钮、撤销/重做和命令搜索都已在嵌入模式隐藏,没有可见内容,于是地图标签栏上方留下一条空白。新增 `owned_by_embedding_page()` 与 `header_has_content()`:桌面模式恒显示头部;嵌入模式只有用户自定义 Quick Access 中存在非工程命令时才保留,否则 `header()` 直接返回,不创建面板。标签栏因此从 iframe 顶部开始。测试 `embedded_header_is_hidden_unless_a_quick_action_needs_it` 覆盖空列表、工程命令、`ui.open` 与普通快捷命令;`cargo test -p rustgis-ui-egui --lib chrome::tests` 8 项通过,完整 `--lib` 243 项单线程通过,`cargo clippy -p rustgis-ui-egui --lib -- -D warnings` 通过。Web dist 用 trunk 0.22 重建后,在正式 8765 实例实测:地图 iframe 顶部直接是 Home/Data/Style/Edit 菜单,空白行消失;桌面 `embedded=false` 路径仍显示头部。构建环境备注:当前 WSL 无系统 clang,使用 `~/llvm-local/root/usr/bin/clang-21` 并设置 `CC_wasm32_unknown_unknown` 与 `LD_LIBRARY_PATH` 完成 wasm 编译;并行运行全量 lib 测试时曾出现 SIGSEGV,单线程全量通过。
+
+## 2026-10-26 悬浮面板最小化白块修复
+
+现象:数据库/数据源悬浮窗点击「─」最小化后,`.fw-body` 已隐藏,但 `#float-win` 仍保留基础样式的 `min-height:260px`,窗口只缩到 260px,标题栏下方留下一大片白色空白。修复 `crates/preview/web/console.html`:`.min` 状态增加 `min-height:0` 和四角圆角,并去掉标题栏底边,使窗口真正收缩到标题栏高度。浏览器实测:520px 高的数据库目录窗最小化后为 37.9px(`body` 为 `display:none`,无白块),再次点击恢复到 520px;用户拖拽过的高度仍由 `dataset.prevH` 恢复。预览服务 release 构建通过并已重启 8765 验证。
